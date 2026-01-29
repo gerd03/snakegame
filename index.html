@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNAKE ARCADE | AI Autopilot</title>
+    <meta name="description" content="Next-gen 3D Snake Arcade powered by AI autopilot with cinematic visuals">
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loader">
+            <div class="loader-ring"></div>
+            <div class="loader-ring"></div>
+            <div class="loader-ring"></div>
+            <span class="loader-text">INITIALIZING AI</span>
+        </div>
+        <div class="loading-progress">
+            <div class="progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="hidden">
+        <div class="menu-container">
+            <h1 class="game-title">
+                <span class="title-snake">SNAKE</span>
+                <span class="title-arcade">ARCADE</span>
+            </h1>
+            <p class="subtitle">AI AUTOPILOT EDITION</p>
+            
+            <div class="menu-options">
+                <div class="ai-selector">
+                    <label>AI DIFFICULTY</label>
+                    <div class="difficulty-buttons">
+                        <button class="diff-btn" data-level="beginner">BEGINNER</button>
+                        <button class="diff-btn active" data-level="pro">PRO</button>
+                        <button class="diff-btn" data-level="godmode">GOD MODE</button>
+                    </div>
+                </div>
+                
+                <button id="start-btn" class="neon-btn primary">
+                    <span>LAUNCH AI</span>
+                    <div class="btn-glow"></div>
+                </button>
+                
+                <button id="spectator-btn" class="neon-btn secondary">
+                    <span>SPECTATOR MODE</span>
+                </button>
+            </div>
+            
+            <div class="menu-footer">
+                <span class="version">v1.0</span>
+                <span class="credits">AUTONOMOUS SNAKE INTELLIGENCE</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game HUD -->
+    <div id="game-hud" class="hidden">
+        <div class="hud-top">
+            <div class="score-container">
+                <span class="score-label">SCORE</span>
+                <span id="score-value" class="score-value">0</span>
+            </div>
+            <div class="combo-container">
+                <span id="combo-value" class="combo-value hidden">x2</span>
+            </div>
+            <div class="ai-status">
+                <span class="ai-indicator"></span>
+                <span id="ai-mode">PRO AI</span>
+            </div>
+        </div>
+        
+        <div class="hud-left">
+            <div class="stat-item">
+                <span class="stat-label">LENGTH</span>
+                <span id="length-value" class="stat-value">3</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">SURVIVAL</span>
+                <span id="time-value" class="stat-value">0:00</span>
+            </div>
+        </div>
+        
+        <div class="hud-right">
+            <div id="powerup-container" class="powerup-container"></div>
+        </div>
+        
+        <div class="hud-bottom">
+            <button id="pause-btn" class="control-btn">⏸</button>
+            <button id="camera-btn" class="control-btn">🎥</button>
+            <button id="sound-btn" class="control-btn">🔊</button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="game-over" class="hidden">
+        <div class="game-over-container">
+            <h2 class="game-over-title">GAME OVER</h2>
+            <div class="final-stats">
+                <div class="final-stat">
+                    <span class="final-label">FINAL SCORE</span>
+                    <span id="final-score" class="final-value">0</span>
+                </div>
+                <div class="final-stat">
+                    <span class="final-label">MAX LENGTH</span>
+                    <span id="final-length" class="final-value">0</span>
+                </div>
+                <div class="final-stat">
+                    <span class="final-label">SURVIVAL TIME</span>
+                    <span id="final-time" class="final-value">0:00</span>
+                </div>
+            </div>
+            <div class="game-over-buttons">
+                <button id="restart-btn" class="neon-btn primary">RESTART</button>
+                <button id="menu-btn" class="neon-btn secondary">MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pause Screen -->
+    <div id="pause-screen" class="hidden">
+        <div class="pause-container">
+            <h2>PAUSED</h2>
+            <p>AI AUTOPILOT STANDBY</p>
+            <button id="resume-btn" class="neon-btn primary">RESUME</button>
+        </div>
+    </div>
+
+    <!-- Three.js Canvas Container -->
+    <div id="game-container"></div>
+
+    <!-- Import Maps for ES Modules -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <!-- Main Game Script -->
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
