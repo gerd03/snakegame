@@ -81,7 +81,10 @@ class SnakeArcade {
             score: document.getElementById('score-value'),
             length: document.getElementById('length-value'),
             time: document.getElementById('time-value'),
-            combo: document.getElementById('combo-value'),
+            comboHud: document.getElementById('combo-hud'),
+            comboText: document.getElementById('combo-text'),
+            comboMultiplier: document.getElementById('combo-multiplier'),
+            comboTimer: document.getElementById('combo-timer-bar'),
             aiMode: document.getElementById('ai-mode'),
             finalScore: document.getElementById('final-score'),
             finalLength: document.getElementById('final-length'),
@@ -1013,6 +1016,7 @@ class SnakeArcade {
         // Update systems
         this.snake.update(deltaTime);
         this.food.update(deltaTime);
+        this.scoreManager.update(deltaTime);
         this.powerUpManager.update(deltaTime);
         this.particles.update(deltaTime);
         this.cameraController.update(deltaTime, this.snake.getHeadPosition());
@@ -1026,10 +1030,13 @@ class SnakeArcade {
         this.score += Math.floor(points * multiplier);
         this.scoreManager.addCombo();
 
-        // Update combo display
-        if (multiplier > 1) {
-            this.ui.combo.textContent = `x${multiplier}`;
-            this.ui.combo.classList.remove('hidden');
+        // Visual feedback for point gain
+        const comboData = this.scoreManager.getComboData();
+        if (comboData) {
+            this.ui.comboHud.classList.remove('hidden');
+            this.ui.comboHud.classList.remove('combo-pop');
+            void this.ui.comboHud.offsetWidth; // Trigger reflow
+            this.ui.comboHud.classList.add('combo-pop');
         }
     }
 
@@ -1055,13 +1062,36 @@ class SnakeArcade {
     }
 
     updateHUD() {
-        this.ui.score.textContent = this.score;
+        this.ui.score.textContent = this.score.toLocaleString();
         this.ui.length.textContent = this.snake.length;
         this.ui.time.textContent = this.formatTime(this.survivalTime);
 
-        // Update combo visibility
-        if (this.scoreManager.getMultiplier() <= 1) {
-            this.ui.combo.classList.add('hidden');
+        // Update Combo HUD
+        const comboData = this.scoreManager.getComboData();
+        if (comboData) {
+            this.ui.comboHud.classList.remove('hidden');
+            this.ui.comboText.textContent = comboData.label;
+            this.ui.comboMultiplier.textContent = `x${comboData.multiplier}`;
+            this.ui.comboTimer.style.width = `${comboData.progress * 100}%`;
+
+            // Apply colors and extra effects
+            this.ui.comboText.style.color = comboData.color;
+            this.ui.comboMultiplier.style.color = comboData.color;
+            this.ui.comboTimer.style.background = comboData.color;
+            this.ui.comboTimer.style.boxShadow = `0 0 10px ${comboData.color}`;
+
+            // Add shake for high combos
+            if (comboData.multiplier >= 5) {
+                this.ui.comboHud.classList.add('combo-shake');
+                this.ui.comboHud.classList.add('combo-glow');
+            } else {
+                this.ui.comboHud.classList.remove('combo-shake');
+                this.ui.comboHud.classList.remove('combo-glow');
+            }
+        } else {
+            this.ui.comboHud.classList.add('hidden');
+            this.ui.comboHud.classList.remove('combo-shake');
+            this.ui.comboHud.classList.remove('combo-glow');
         }
     }
 
