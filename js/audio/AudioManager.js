@@ -1,5 +1,6 @@
 /**
- * AudioManager - Synthwave Audio with Adaptive Intensity
+ * AudioManager - Jolly Jamming Music Style
+ * Upbeat, happy, fun background music
  */
 
 export class AudioManager {
@@ -10,10 +11,8 @@ export class AudioManager {
         this.volume = 0.5;
         this.intensity = 0;
 
-        // Oscillators for procedural audio
         this.bgmOscillators = [];
         this.bgmGain = null;
-
         this.initialized = false;
     }
 
@@ -37,131 +36,130 @@ export class AudioManager {
 
         this.bgmPlaying = true;
 
-        // Create synthwave-style BGM with oscillators
+        // Create jolly jamming style BGM
         this.bgmGain = this.context.createGain();
-        this.bgmGain.gain.value = 0.15;
+        this.bgmGain.gain.value = 0.12;
         this.bgmGain.connect(this.masterGain);
 
-        // Bass line
-        this.createBassLine();
+        // Bouncy bass
+        this.createBouncyBass();
 
-        // Pad
-        this.createPad();
+        // Happy chords
+        this.createHappyChords();
 
-        // Arp
-        this.createArpeggio();
+        // Playful melody
+        this.createPlayfulMelody();
     }
 
-    createBassLine() {
+    createBouncyBass() {
         const bassGain = this.context.createGain();
-        bassGain.gain.value = 0.3;
+        bassGain.gain.value = 0.25;
         bassGain.connect(this.bgmGain);
 
-        const bassNotes = [55, 55, 73.42, 82.41]; // A1, A1, D2, E2
+        // Happy major key bass notes (C major)
+        const bassNotes = [130.81, 146.83, 164.81, 146.83]; // C3, D3, E3, D3
         let noteIndex = 0;
 
         const playBassNote = () => {
             if (!this.bgmPlaying) return;
 
             const osc = this.context.createOscillator();
-            osc.type = 'sawtooth';
+            osc.type = 'triangle';  // Softer, rounder bass
             osc.frequency.value = bassNotes[noteIndex];
 
             const filter = this.context.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.value = 200;
+            filter.frequency.value = 300;
 
             const noteGain = this.context.createGain();
             noteGain.gain.setValueAtTime(0.3, this.context.currentTime);
-            noteGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.4);
+            noteGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.25);
 
             osc.connect(filter);
             filter.connect(noteGain);
             noteGain.connect(bassGain);
 
             osc.start();
-            osc.stop(this.context.currentTime + 0.5);
+            osc.stop(this.context.currentTime + 0.3);
 
             noteIndex = (noteIndex + 1) % bassNotes.length;
 
-            setTimeout(playBassNote, 500);
+            setTimeout(playBassNote, 300);  // Bouncy tempo
         };
 
         playBassNote();
     }
 
-    createPad() {
-        const padGain = this.context.createGain();
-        padGain.gain.value = 0.1;
-        padGain.connect(this.bgmGain);
+    createHappyChords() {
+        const chordGain = this.context.createGain();
+        chordGain.gain.value = 0.08;
+        chordGain.connect(this.bgmGain);
 
-        const chordNotes = [220, 277.18, 329.63, 440]; // A3, C#4, E4, A4
+        // C major chord - happy and bright
+        const chordNotes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
 
         chordNotes.forEach((freq, i) => {
             const osc = this.context.createOscillator();
             osc.type = 'sine';
             osc.frequency.value = freq;
-
-            // Slight detune for width
-            osc.detune.value = (i - 1.5) * 10;
+            osc.detune.value = (i - 1.5) * 5;  // Slight chorus effect
 
             const filter = this.context.createBiquadFilter();
             filter.type = 'lowpass';
-            filter.frequency.value = 800;
+            filter.frequency.value = 1200;
 
             osc.connect(filter);
-            filter.connect(padGain);
+            filter.connect(chordGain);
 
             osc.start();
             this.bgmOscillators.push(osc);
         });
     }
 
-    createArpeggio() {
-        const arpGain = this.context.createGain();
-        arpGain.gain.value = 0.1;
-        arpGain.connect(this.bgmGain);
+    createPlayfulMelody() {
+        const melodyGain = this.context.createGain();
+        melodyGain.gain.value = 0.12;
+        melodyGain.connect(this.bgmGain);
 
-        const arpNotes = [440, 554.37, 659.25, 880, 659.25, 554.37];
+        // Happy pentatonic melody
+        const melodyNotes = [
+            523.25, 587.33, 659.25, 783.99,  // C5, D5, E5, G5
+            783.99, 659.25, 587.33, 523.25,  // G5, E5, D5, C5
+            659.25, 783.99, 880.00, 783.99,  // E5, G5, A5, G5
+            659.25, 587.33, 523.25, 523.25   // E5, D5, C5, C5
+        ];
         let noteIndex = 0;
 
-        const playArpNote = () => {
+        const playMelodyNote = () => {
             if (!this.bgmPlaying) return;
 
             const osc = this.context.createOscillator();
-            osc.type = 'square';
-            osc.frequency.value = arpNotes[noteIndex];
-
-            const filter = this.context.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.value = 2000;
-            filter.Q.value = 5;
+            osc.type = 'sine';
+            osc.frequency.value = melodyNotes[noteIndex];
 
             const noteGain = this.context.createGain();
-            noteGain.gain.setValueAtTime(0.2, this.context.currentTime);
-            noteGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.1);
+            noteGain.gain.setValueAtTime(0.25, this.context.currentTime);
+            noteGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.15);
 
-            osc.connect(filter);
-            filter.connect(noteGain);
-            noteGain.connect(arpGain);
+            osc.connect(noteGain);
+            noteGain.connect(melodyGain);
 
             osc.start();
-            osc.stop(this.context.currentTime + 0.15);
+            osc.stop(this.context.currentTime + 0.2);
 
-            noteIndex = (noteIndex + 1) % arpNotes.length;
+            noteIndex = (noteIndex + 1) % melodyNotes.length;
 
-            // Speed up with intensity
-            const interval = 150 - this.intensity * 50;
-            setTimeout(playArpNote, Math.max(75, interval));
+            // Playful timing - slightly faster
+            const interval = 150 - this.intensity * 30;
+            setTimeout(playMelodyNote, Math.max(100, interval));
         };
 
-        playArpNote();
+        playMelodyNote();
     }
 
     stopBGM() {
         this.bgmPlaying = false;
 
-        // Stop all oscillators
         this.bgmOscillators.forEach(osc => {
             try { osc.stop(); } catch (e) { }
         });
@@ -194,17 +192,21 @@ export class AudioManager {
             case 'death':
                 this.playDeathSound();
                 break;
+            case 'explosion':
+                this.playExplosionSound();
+                break;
         }
     }
 
     playCollectSound() {
+        // Happy "ding!" sound
         const osc = this.context.createOscillator();
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, this.context.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1046.5, this.context.currentTime + 0.1);
+        osc.frequency.setValueAtTime(880, this.context.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1760, this.context.currentTime + 0.08);
 
         const gain = this.context.createGain();
-        gain.gain.setValueAtTime(0.3, this.context.currentTime);
+        gain.gain.setValueAtTime(0.25, this.context.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.15);
 
         osc.connect(gain);
@@ -215,69 +217,94 @@ export class AudioManager {
     }
 
     playPowerUpSound() {
-        const frequencies = [261.63, 329.63, 392, 523.25];
+        // Ascending happy tones
+        const frequencies = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
 
         frequencies.forEach((freq, i) => {
             setTimeout(() => {
                 const osc = this.context.createOscillator();
-                osc.type = 'triangle';
+                osc.type = 'sine';
                 osc.frequency.value = freq;
 
                 const gain = this.context.createGain();
                 gain.gain.setValueAtTime(0.2, this.context.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.2);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.15);
 
                 osc.connect(gain);
                 gain.connect(this.masterGain);
 
                 osc.start();
-                osc.stop(this.context.currentTime + 0.25);
-            }, i * 75);
+                osc.stop(this.context.currentTime + 0.2);
+            }, i * 60);
         });
     }
 
     playDeathSound() {
+        // Sad descending sound
         const osc = this.context.createOscillator();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(200, this.context.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(50, this.context.currentTime + 0.5);
-
-        const filter = this.context.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(1000, this.context.currentTime);
-        filter.frequency.exponentialRampToValueAtTime(100, this.context.currentTime + 0.5);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(400, this.context.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, this.context.currentTime + 0.4);
 
         const gain = this.context.createGain();
-        gain.gain.setValueAtTime(0.4, this.context.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.6);
+        gain.gain.setValueAtTime(0.3, this.context.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.5);
 
-        osc.connect(filter);
-        filter.connect(gain);
+        osc.connect(gain);
         gain.connect(this.masterGain);
 
         osc.start();
-        osc.stop(this.context.currentTime + 0.7);
+        osc.stop(this.context.currentTime + 0.6);
+    }
 
-        // Impact noise
-        const noise = this.context.createBufferSource();
-        const noiseBuffer = this.context.createBuffer(1, this.context.sampleRate * 0.2, this.context.sampleRate);
-        const noiseData = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < noiseData.length; i++) {
-            noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (noiseData.length * 0.1));
+    playExplosionSound() {
+        // Deep boom explosion sound
+
+        // Low frequency boom
+        const boom = this.context.createOscillator();
+        boom.type = 'sine';
+        boom.frequency.setValueAtTime(80, this.context.currentTime);
+        boom.frequency.exponentialRampToValueAtTime(30, this.context.currentTime + 0.3);
+
+        const boomGain = this.context.createGain();
+        boomGain.gain.setValueAtTime(0.5, this.context.currentTime);
+        boomGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.5);
+
+        boom.connect(boomGain);
+        boomGain.connect(this.masterGain);
+
+        boom.start();
+        boom.stop(this.context.currentTime + 0.6);
+
+        // Noise burst for explosion texture
+        const bufferSize = this.context.sampleRate * 0.3;
+        const noiseBuffer = this.context.createBuffer(1, bufferSize, this.context.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            output[i] = Math.random() * 2 - 1;
         }
+
+        const noise = this.context.createBufferSource();
         noise.buffer = noiseBuffer;
 
-        const noiseGain = this.context.createGain();
-        noiseGain.gain.value = 0.3;
+        const noiseFilter = this.context.createBiquadFilter();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(1000, this.context.currentTime);
+        noiseFilter.frequency.exponentialRampToValueAtTime(100, this.context.currentTime + 0.3);
 
-        noise.connect(noiseGain);
+        const noiseGain = this.context.createGain();
+        noiseGain.gain.setValueAtTime(0.3, this.context.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.4);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
         noiseGain.connect(this.masterGain);
 
         noise.start();
+        noise.stop(this.context.currentTime + 0.4);
     }
 
     updateIntensity(score) {
-        // Increase intensity based on score
         this.intensity = Math.min(1, score / 500);
     }
 

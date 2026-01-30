@@ -1,180 +1,191 @@
 /**
- * AIController - SIMPLE & RELIABLE Snake Autopilot
+ * AIController - Path Planning Snake AI
  * 
- * NO complex algorithms, just simple rules that WORK:
- * 1. Always move to an ADJACENT cell only
- * 2. Never move into walls or self
- * 3. Prefer moves with more space
- * 4. Chase food when safe
+ * Plans path to food AND simulates eating to ensure escape
+ * Only eats if safe path out exists after eating
  */
 
 export class AIController {
     constructor(gridSize, difficulty = 'pro') {
         this.gridSize = gridSize;
-        this.maxCoord = Math.floor(gridSize / 2) - 1; // 9 for gridSize 20
+        this.maxCoord = Math.floor(gridSize / 2) - 1; // 9
         this.difficulty = difficulty;
-        this.inDanger = false;
+        this.bombPositions = [];
     }
 
-    setDifficulty(difficulty) {
-        this.difficulty = difficulty;
-    }
+    setDifficulty(d) { this.difficulty = d; }
+    setBombDangerZones(zones) { this.bombPositions = zones || []; }
 
     getNextDirection(headPos, currentDir, occupiedCells, foodPos, activePowerUps) {
         const head = { x: headPos.gridX, z: headPos.gridZ };
         const food = { x: foodPos.x, z: foodPos.z };
         const snake = occupiedCells;
-        const snakeLength = snake.length;
+        const len = snake.length;
+        const tail = snake[len - 1];
 
-        // Get all 4 possible directions
-        const directions = [
-            { x: 0, z: -1, name: 'UP' },
-            { x: 0, z: 1, name: 'DOWN' },
-            { x: -1, z: 0, name: 'LEFT' },
-            { x: 1, z: 0, name: 'RIGHT' }
-        ];
+        // Get valid moves
+        const moves = this.getValidMoves(head, currentDir, snake);
+        if (moves.length === 0) return currentDir;
+        if (moves.length === 1) return moves[0].dir;
 
-        // Find all VALID moves (adjacent, not wall, not self)
-        const validMoves = [];
-
-        for (const dir of directions) {
-            // Skip going backwards (180-degree turn)
-            if (currentDir.x !== 0 || currentDir.z !== 0) {
-                if (dir.x === -currentDir.x && dir.z === -currentDir.z) {
-                    continue;
-                }
-            }
-
-            // Calculate new position (MUST be adjacent - only 1 cell away)
-            const newPos = {
-                x: head.x + dir.x,
-                z: head.z + dir.z
-            };
-
-            // Check walls
-            if (newPos.x < -this.maxCoord || newPos.x > this.maxCoord ||
-                newPos.z < -this.maxCoord || newPos.z > this.maxCoord) {
-                continue;
-            }
-
-            // Check self-collision (except tail which will move away)
-            let hitsBody = false;
-            for (let i = 0; i < snake.length - 1; i++) {
-                if (snake[i].x === newPos.x && snake[i].z === newPos.z) {
-                    hitsBody = true;
-                    break;
-                }
-            }
-            if (hitsBody) continue;
-
-            // This move is valid
-            validMoves.push({
-                dir: { x: dir.x, z: dir.z },
-                pos: newPos,
-                name: dir.name
-            });
-        }
-
-        // No valid moves = game over inevitable
-        if (validMoves.length === 0) {
-            this.inDanger = true;
-            return currentDir;
-        }
-
-        // If only 1 valid move, take it
-        if (validMoves.length === 1) {
-            return validMoves[0].dir;
-        }
-
-        // Score each valid move
-        for (const move of validMoves) {
-            move.score = 0;
-
-            // Count reachable space using flood fill
-            move.space = this.countReachableSpace(move.pos, snake);
-
-            // CRITICAL: Heavy penalty for moves with less space than snake length
-            if (move.space < snakeLength + 2) {
-                move.score -= 5000;
-            } else {
-                move.score += move.space * 2;
-            }
-
-            // Distance to food (closer is better)
+        // Calculate safety for each move
+        for (const move of moves) {
+            move.inBomb = this.bombPositions.some(b => b.x === move.pos.x && b.z === move.pos.z);
+            move.space = this.floodFill(move.pos, snake);
             move.foodDist = Math.abs(move.pos.x - food.x) + Math.abs(move.pos.z - food.z);
+            move.isSafe = move.space >= len && !move.inBomb;
 
-            // Only consider food if the move is safe
-            if (move.space >= snakeLength + 2) {
-                move.score -= move.foodDist * 10;
-            }
+            // Is this move directly onto food?
+            move.isFood = move.pos.x === food.x && move.pos.z === food.z;
 
-            // Prefer staying away from walls
-            const wallDist = Math.min(
-                move.pos.x - (-this.maxCoord),
-                this.maxCoord - move.pos.x,
-                move.pos.z - (-this.maxCoord),
-                this.maxCoord - move.pos.z
-            );
-            move.score += wallDist * 5;
-
-            // Slight preference for going straight
-            if (dir.x === currentDir.x && dir.z === currentDir.z) {
-                move.score += 3;
+            // If eating food, simulate and check if we can escape after
+            if (move.isFood) {
+                // After eating, snake grows (tail stays, head moves to food)
+                const newSnake = [move.pos, ...snake]; // Simulate grown snake
+                move.escapeAfterEating = this.canEscape(move.pos, newSnake);
             }
         }
 
-        // Sort by score (highest first)
-        validMoves.sort((a, b) => b.score - a.score);
+        // PRIORITY 1: Safe move onto food IF we can escape after eating
+        const safeFood = moves.find(m => m.isFood && m.isSafe && m.escapeAfterEating);
+        if (safeFood) {
+            return safeFood.dir;
+        }
 
-        // Return the best move
-        const bestMove = validMoves[0];
-        this.inDanger = bestMove.space < snakeLength * 1.5;
+        // PRIORITY 2: Safe move getting closer to food
+        const currentFoodDist = Math.abs(head.x - food.x) + Math.abs(head.z - food.z);
+        const safeCloser = moves.filter(m => m.isSafe && m.foodDist < currentFoodDist);
+        if (safeCloser.length > 0) {
+            // Pick move with most space
+            safeCloser.sort((a, b) => b.space - a.space);
+            return safeCloser[0].dir;
+        }
 
-        return bestMove.dir;
+        // PRIORITY 3: Any safe move, closest to food
+        const safeMoves = moves.filter(m => m.isSafe);
+        if (safeMoves.length > 0) {
+            safeMoves.sort((a, b) => {
+                if (a.foodDist !== b.foodDist) return a.foodDist - b.foodDist;
+                return b.space - a.space;
+            });
+            return safeMoves[0].dir;
+        }
+
+        // PRIORITY 4: Survival - most space
+        moves.sort((a, b) => b.space - a.space);
+        return moves[0].dir;
     }
 
-    // Simple flood fill to count reachable cells
-    countReachableSpace(start, snake) {
-        const visited = new Set();
-        const queue = [start];
-        let count = 0;
-        const maxCount = 400; // Max possible cells
+    /**
+     * Check if snake can escape (has room) after eating
+     */
+    canEscape(head, snake) {
+        const len = snake.length;
+        const tail = snake[len - 1];
 
-        // Create snake body lookup set (exclude tail)
+        // Can we reach tail?
+        if (this.canReach(head, tail, snake)) {
+            return true;
+        }
+
+        // Check if we have enough space
+        const space = this.floodFill(head, snake);
+        return space >= len + 5; // Need buffer room
+    }
+
+    canReach(start, target, snake) {
         const blocked = new Set();
         for (let i = 0; i < snake.length - 1; i++) {
             blocked.add(`${snake[i].x},${snake[i].z}`);
         }
 
-        while (queue.length > 0 && count < maxCount) {
-            const current = queue.shift();
-            const key = `${current.x},${current.z}`;
+        const visited = new Set();
+        const queue = [start];
+
+        while (queue.length > 0) {
+            const pos = queue.shift();
+            if (pos.x === target.x && pos.z === target.z) return true;
+
+            const key = `${pos.x},${pos.z}`;
+            if (visited.has(key)) continue;
+            if (blocked.has(key)) continue;
+            if (!this.inBounds(pos)) continue;
+
+            visited.add(key);
+            queue.push(
+                { x: pos.x + 1, z: pos.z },
+                { x: pos.x - 1, z: pos.z },
+                { x: pos.x, z: pos.z + 1 },
+                { x: pos.x, z: pos.z - 1 }
+            );
+        }
+        return false;
+    }
+
+    floodFill(start, snake) {
+        const blocked = new Set();
+        for (let i = 0; i < snake.length - 1; i++) {
+            blocked.add(`${snake[i].x},${snake[i].z}`);
+        }
+        for (const b of this.bombPositions) {
+            blocked.add(`${b.x},${b.z}`);
+        }
+
+        const visited = new Set();
+        const queue = [start];
+        let count = 0;
+
+        while (queue.length > 0 && count < 400) {
+            const pos = queue.shift();
+            const key = `${pos.x},${pos.z}`;
 
             if (visited.has(key)) continue;
-
-            // Check if blocked
             if (blocked.has(key)) continue;
-
-            // Check walls
-            if (current.x < -this.maxCoord || current.x > this.maxCoord ||
-                current.z < -this.maxCoord || current.z > this.maxCoord) {
-                continue;
-            }
+            if (!this.inBounds(pos)) continue;
 
             visited.add(key);
             count++;
-
-            // Add all 4 neighbors to queue
-            queue.push({ x: current.x + 1, z: current.z });
-            queue.push({ x: current.x - 1, z: current.z });
-            queue.push({ x: current.x, z: current.z + 1 });
-            queue.push({ x: current.x, z: current.z - 1 });
+            queue.push(
+                { x: pos.x + 1, z: pos.z },
+                { x: pos.x - 1, z: pos.z },
+                { x: pos.x, z: pos.z + 1 },
+                { x: pos.x, z: pos.z - 1 }
+            );
         }
-
         return count;
     }
 
-    isInDanger() {
-        return this.inDanger;
+    getValidMoves(head, currentDir, snake) {
+        const dirs = [
+            { x: 0, z: -1 },
+            { x: 0, z: 1 },
+            { x: -1, z: 0 },
+            { x: 1, z: 0 }
+        ];
+
+        const blocked = new Set();
+        for (let i = 1; i < snake.length; i++) {
+            blocked.add(`${snake[i].x},${snake[i].z}`);
+        }
+
+        const moves = [];
+        for (const d of dirs) {
+            if (currentDir.x === -d.x && currentDir.z === -d.z &&
+                (currentDir.x !== 0 || currentDir.z !== 0)) continue;
+
+            const pos = { x: head.x + d.x, z: head.z + d.z };
+            if (!this.inBounds(pos)) continue;
+            if (blocked.has(`${pos.x},${pos.z}`)) continue;
+
+            moves.push({ dir: d, pos });
+        }
+        return moves;
     }
+
+    inBounds(pos) {
+        return pos.x >= -this.maxCoord && pos.x <= this.maxCoord &&
+            pos.z >= -this.maxCoord && pos.z <= this.maxCoord;
+    }
+
+    isInDanger() { return false; }
 }

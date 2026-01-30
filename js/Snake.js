@@ -1,5 +1,6 @@
 /**
- * Snake - Slither.io Style Snake with Colorful Patterns
+ * Snake - Google Snake Style with Smooth Connected Body
+ * Slim, smooth tube-like body without bloating
  */
 
 import * as THREE from 'three';
@@ -13,66 +14,42 @@ export class Snake {
 
         this.segments = [];
         this.meshes = [];
+        this.connectors = [];
         this.direction = { x: 1, z: 0 };
         this.length = 3;
         this.growPending = 0;
 
-        // Visual settings - Slither.io style
-        this.segmentSize = cellSize * 0.85;
-        this.headSize = cellSize * 1.0;
+        // Visual settings - slim smooth body
+        this.bodyRadius = cellSize * 0.32;  // Slimmer
+        this.headRadius = cellSize * 0.38;
 
-        // Color themes like Slither.io
-        this.colorThemes = [
-            { primary: 0x7cb342, secondary: 0xff6f00, stripe: 0x33691e }, // Green/Orange
-            { primary: 0xff7043, secondary: 0x29b6f6, stripe: 0xbf360c }, // Orange/Blue
-            { primary: 0x29b6f6, secondary: 0x0d47a1, stripe: 0x01579b }, // Blue
-            { primary: 0xec407a, secondary: 0xad1457, stripe: 0x880e4f }, // Pink
-            { primary: 0x8d6e63, secondary: 0x5d4037, stripe: 0x3e2723 }, // Brown
-            { primary: 0xef5350, secondary: 0xffee58, stripe: 0xc62828 }  // Red/Yellow
-        ];
-
-        this.currentTheme = this.colorThemes[Math.floor(Math.random() * this.colorThemes.length)];
-
-        // Animation
-        this.moveProgress = 0;
-        this.previousPositions = [];
+        // Blue snake color
+        this.snakeColor = 0x4285F4;
 
         this.createMaterials();
         this.reset();
     }
 
     createMaterials() {
-        // Head material
-        this.headMaterial = new THREE.MeshStandardMaterial({
-            color: this.currentTheme.primary,
-            metalness: 0.3,
-            roughness: 0.7
+        // Body material - no shadows for performance
+        this.bodyMaterial = new THREE.MeshStandardMaterial({
+            color: this.snakeColor,
+            roughness: 0.5,
+            metalness: 0.0
         });
 
-        // Eye white material
-        this.eyeWhiteMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            metalness: 0.1,
-            roughness: 0.3
+        // Eye materials
+        this.eyeWhiteMaterial = new THREE.MeshBasicMaterial({
+            color: 0xFFFFFF
         });
 
-        // Eye pupil material
-        this.pupilMaterial = new THREE.MeshStandardMaterial({
-            color: 0x000000,
-            metalness: 0.5,
-            roughness: 0.2
-        });
-
-        // Tongue material
-        this.tongueMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff1744,
-            metalness: 0.2,
-            roughness: 0.5
+        this.pupilMaterial = new THREE.MeshBasicMaterial({
+            color: 0x000000
         });
     }
 
     reset() {
-        // Clear existing meshes
+        // Clear meshes
         this.meshes.forEach(mesh => {
             this.scene.remove(mesh);
             if (mesh.children) {
@@ -84,32 +61,27 @@ export class Snake {
         });
         this.meshes = [];
 
-        // Pick new random color theme
-        this.currentTheme = this.colorThemes[Math.floor(Math.random() * this.colorThemes.length)];
-        this.createMaterials();
+        this.connectors.forEach(conn => {
+            this.scene.remove(conn);
+            if (conn.geometry) conn.geometry.dispose();
+        });
+        this.connectors = [];
 
-        // Reset state
         this.length = 3;
         this.direction = { x: 1, z: 0 };
         this.growPending = 0;
 
-        // Initialize segments at center
         this.segments = [];
         for (let i = 0; i < this.length; i++) {
-            this.segments.push({
-                x: -i,
-                z: 0
-            });
+            this.segments.push({ x: -i, z: 0 });
         }
 
-        // Create meshes
         this.createMeshes();
     }
 
     createMeshes() {
         this.segments.forEach((seg, index) => {
             let mesh;
-
             if (index === 0) {
                 mesh = this.createHead();
             } else {
@@ -118,215 +90,199 @@ export class Snake {
 
             mesh.position.set(
                 seg.x * this.cellSize,
-                this.segmentSize / 2,
+                this.cellSize * 0.35,
                 seg.z * this.cellSize
             );
 
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            this.scene.add(mesh);
             this.meshes.push(mesh);
+            this.scene.add(mesh);
         });
+
+        this.updateConnectors();
     }
 
     createHead() {
-        const headGroup = new THREE.Group();
-
-        // Main head - slightly oval
-        const headGeometry = new THREE.SphereGeometry(this.headSize / 2, 32, 32);
-        headGeometry.scale(1.1, 0.9, 1.0);
-        const head = new THREE.Mesh(headGeometry, this.headMaterial);
-        headGroup.add(head);
-
-        // Eyes - large and prominent like Slither.io
-        const eyeSize = this.headSize * 0.22;
-        const eyeGeometry = new THREE.SphereGeometry(eyeSize, 16, 16);
-
-        // Left eye white
-        const leftEyeWhite = new THREE.Mesh(eyeGeometry, this.eyeWhiteMaterial);
-        leftEyeWhite.position.set(this.headSize * 0.22, this.headSize * 0.15, this.headSize * 0.32);
-        leftEyeWhite.scale.set(1, 1.2, 0.8);
-        headGroup.add(leftEyeWhite);
-
-        // Left pupil
-        const pupilGeometry = new THREE.SphereGeometry(eyeSize * 0.5, 16, 16);
-        const leftPupil = new THREE.Mesh(pupilGeometry, this.pupilMaterial);
-        leftPupil.position.set(this.headSize * 0.26, this.headSize * 0.15, this.headSize * 0.4);
-        headGroup.add(leftPupil);
-
-        // Right eye white
-        const rightEyeWhite = new THREE.Mesh(eyeGeometry, this.eyeWhiteMaterial);
-        rightEyeWhite.position.set(-this.headSize * 0.22, this.headSize * 0.15, this.headSize * 0.32);
-        rightEyeWhite.scale.set(1, 1.2, 0.8);
-        headGroup.add(rightEyeWhite);
-
-        // Right pupil
-        const rightPupil = new THREE.Mesh(pupilGeometry, this.pupilMaterial);
-        rightPupil.position.set(-this.headSize * 0.26, this.headSize * 0.15, this.headSize * 0.4);
-        headGroup.add(rightPupil);
-
-        // Tongue (hidden by default)
-        const tongueGeometry = new THREE.CylinderGeometry(0.03, 0.02, 0.4, 8);
-        const tongue = new THREE.Mesh(tongueGeometry, this.tongueMaterial);
-        tongue.rotation.x = Math.PI / 2;
-        tongue.position.z = this.headSize * 0.6;
-        tongue.visible = false;
-        tongue.name = 'tongue';
-        headGroup.add(tongue);
-
-        return headGroup;
-    }
-
-    createBodySegment(index) {
         const group = new THREE.Group();
 
-        // Determine if this segment should be striped
-        const isStripe = index % 2 === 0;
+        // Smooth head sphere
+        const headGeometry = new THREE.SphereGeometry(this.headRadius, 24, 24);
+        const head = new THREE.Mesh(headGeometry, this.bodyMaterial);
+        group.add(head);
 
-        // Taper towards tail
-        const t = index / Math.max(this.segments.length - 1, 1);
-        const size = this.segmentSize * (1 - t * 0.35);
+        // Eyes
+        const eyeSize = this.headRadius * 0.4;
+        const eyeOffset = this.headRadius * 0.45;
+        const eyeHeight = this.headRadius * 0.25;
+        const eyeForward = this.headRadius * 0.7;
 
-        // Main body sphere
-        const geometry = new THREE.SphereGeometry(size / 2, 16, 16);
+        // Left eye
+        const leftEyeWhite = new THREE.Mesh(
+            new THREE.SphereGeometry(eyeSize, 12, 12),
+            this.eyeWhiteMaterial
+        );
+        leftEyeWhite.position.set(-eyeOffset, eyeHeight, eyeForward);
+        group.add(leftEyeWhite);
 
-        const color = isStripe ? this.currentTheme.secondary : this.currentTheme.primary;
+        const leftPupil = new THREE.Mesh(
+            new THREE.SphereGeometry(eyeSize * 0.5, 8, 8),
+            this.pupilMaterial
+        );
+        leftPupil.position.set(-eyeOffset, eyeHeight, eyeForward + eyeSize * 0.6);
+        group.add(leftPupil);
 
-        const material = new THREE.MeshStandardMaterial({
-            color: color,
-            metalness: 0.2,
-            roughness: 0.7
-        });
+        // Right eye
+        const rightEyeWhite = new THREE.Mesh(
+            new THREE.SphereGeometry(eyeSize, 12, 12),
+            this.eyeWhiteMaterial
+        );
+        rightEyeWhite.position.set(eyeOffset, eyeHeight, eyeForward);
+        group.add(rightEyeWhite);
 
-        const segment = new THREE.Mesh(geometry, material);
-        group.add(segment);
-
-        // Add stripe ring for pattern
-        if (isStripe && size > this.segmentSize * 0.4) {
-            const ringGeometry = new THREE.TorusGeometry(size / 2 * 0.9, size * 0.08, 8, 16);
-            const ringMaterial = new THREE.MeshStandardMaterial({
-                color: this.currentTheme.stripe,
-                metalness: 0.3,
-                roughness: 0.6
-            });
-            const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-            ring.rotation.x = Math.PI / 2;
-            group.add(ring);
-        }
+        const rightPupil = new THREE.Mesh(
+            new THREE.SphereGeometry(eyeSize * 0.5, 8, 8),
+            this.pupilMaterial
+        );
+        rightPupil.position.set(eyeOffset, eyeHeight, eyeForward + eyeSize * 0.6);
+        group.add(rightPupil);
 
         return group;
     }
 
+    createBodySegment(index) {
+        // Simple sphere for body - connectors create the tube effect
+        const geometry = new THREE.SphereGeometry(this.bodyRadius, 16, 16);
+        return new THREE.Mesh(geometry, this.bodyMaterial);
+    }
+
+    updateConnectors() {
+        // Remove old connectors
+        this.connectors.forEach(conn => {
+            this.scene.remove(conn);
+            if (conn.geometry) conn.geometry.dispose();
+        });
+        this.connectors = [];
+
+        // Create smooth tube connectors
+        for (let i = 0; i < this.segments.length - 1; i++) {
+            const seg1 = this.segments[i];
+            const seg2 = this.segments[i + 1];
+
+            const pos1 = new THREE.Vector3(
+                seg1.x * this.cellSize,
+                this.cellSize * 0.35,
+                seg1.z * this.cellSize
+            );
+            const pos2 = new THREE.Vector3(
+                seg2.x * this.cellSize,
+                this.cellSize * 0.35,
+                seg2.z * this.cellSize
+            );
+
+            const connector = this.createConnector(pos1, pos2);
+            this.connectors.push(connector);
+            this.scene.add(connector);
+        }
+    }
+
+    createConnector(pos1, pos2) {
+        const direction = new THREE.Vector3().subVectors(pos2, pos1);
+        const length = direction.length();
+
+        // Slim cylinder connector
+        const geometry = new THREE.CylinderGeometry(
+            this.bodyRadius,
+            this.bodyRadius,
+            length,
+            12
+        );
+
+        const connector = new THREE.Mesh(geometry, this.bodyMaterial);
+        connector.position.copy(pos1).add(pos2).multiplyScalar(0.5);
+        connector.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 1, 0),
+            direction.clone().normalize()
+        );
+
+        return connector;
+    }
+
     move(newDirection) {
-        // VALIDATE: Direction must be exactly 1 cell movement
-        if (!newDirection ||
-            (newDirection.x !== -1 && newDirection.x !== 0 && newDirection.x !== 1) ||
-            (newDirection.z !== -1 && newDirection.z !== 0 && newDirection.z !== 1) ||
-            (newDirection.x === 0 && newDirection.z === 0)) {
-            // Invalid direction, keep current
-            newDirection = { ...this.direction };
+        if (newDirection) {
+            const isOpposite =
+                newDirection.x === -this.direction.x && this.direction.x !== 0 ||
+                newDirection.z === -this.direction.z && this.direction.z !== 0;
+
+            if (!isOpposite) {
+                this.direction = { ...newDirection };
+            }
         }
 
-        // Ensure only one axis moves at a time (no diagonals)
-        if (newDirection.x !== 0 && newDirection.z !== 0) {
-            newDirection = { x: newDirection.x, z: 0 };
-        }
-
-        // Prevent 180-degree turns
-        if (newDirection.x === -this.direction.x && newDirection.z === -this.direction.z &&
-            (this.direction.x !== 0 || this.direction.z !== 0)) {
-            newDirection = { ...this.direction };
-        }
-
-        this.direction = { ...newDirection };
-
-        // Calculate new head position (always exactly 1 cell away)
         const head = this.segments[0];
         const newHead = {
             x: head.x + this.direction.x,
             z: head.z + this.direction.z
         };
 
-        // Check wall collision (bounds are -9 to 9 for 20-grid)
-        const maxCoord = Math.floor(this.gridSize / 2) - 1; // 9 for gridSize 20
+        // Grid boundaries: -9 to 9 (19x19 playable area)
+        const maxCoord = Math.floor(this.gridSize / 2) - 1;  // 9
         if (newHead.x < -maxCoord || newHead.x > maxCoord ||
             newHead.z < -maxCoord || newHead.z > maxCoord) {
             return { collision: true, type: 'wall' };
         }
 
-        // Check self collision
         for (let i = 1; i < this.segments.length; i++) {
             if (this.segments[i].x === newHead.x && this.segments[i].z === newHead.z) {
                 return { collision: true, type: 'self' };
             }
         }
 
-        // Store previous positions for smooth animation
-        this.previousPositions = this.segments.map(s => ({ ...s }));
-
-        // Move segments
         this.segments.unshift(newHead);
 
         if (this.growPending > 0) {
             this.growPending--;
-            // Add new mesh for grown segment
+            this.length++;
             const newMesh = this.createBodySegment(this.segments.length - 1);
-            const lastSeg = this.segments[this.segments.length - 1];
             newMesh.position.set(
-                lastSeg.x * this.cellSize,
-                this.segmentSize / 2,
-                lastSeg.z * this.cellSize
+                this.segments[this.segments.length - 1].x * this.cellSize,
+                this.cellSize * 0.35,
+                this.segments[this.segments.length - 1].z * this.cellSize
             );
-            newMesh.castShadow = true;
-            this.scene.add(newMesh);
             this.meshes.push(newMesh);
+            this.scene.add(newMesh);
         } else {
             this.segments.pop();
         }
 
-        this.moveProgress = 0;
+        this.updateMeshPositions();
+        this.updateConnectors();
+
         return { collision: false };
     }
 
-    update(deltaTime) {
-        this.moveProgress = Math.min(1, this.moveProgress + deltaTime * 10);
-
-        // Update mesh positions with smooth interpolation
+    updateMeshPositions() {
         this.segments.forEach((seg, i) => {
             if (this.meshes[i]) {
-                const targetX = seg.x * this.cellSize;
-                const targetZ = seg.z * this.cellSize;
+                this.meshes[i].position.x = seg.x * this.cellSize;
+                this.meshes[i].position.z = seg.z * this.cellSize;
 
-                // Smooth lerp
-                this.meshes[i].position.x += (targetX - this.meshes[i].position.x) * 0.35;
-                this.meshes[i].position.z += (targetZ - this.meshes[i].position.z) * 0.35;
-
-                // Gentle bobbing
-                const bobOffset = Math.sin(Date.now() * 0.004 + i * 0.3) * 0.03;
-                this.meshes[i].position.y = this.segmentSize / 2 + bobOffset;
+                if (i === 0) {
+                    const angle = Math.atan2(this.direction.x, this.direction.z);
+                    this.meshes[i].rotation.y = angle;
+                }
             }
         });
-
-        // Update head rotation to face direction
-        if (this.meshes[0]) {
-            const targetRotation = Math.atan2(this.direction.x, this.direction.z);
-            const currentRotation = this.meshes[0].rotation.y;
-            this.meshes[0].rotation.y += (targetRotation - currentRotation) * 0.25;
-        }
     }
 
-    grow() {
-        this.growPending++;
-        this.length++;
+    grow(amount = 1) {
+        this.growPending += amount;
+    }
 
-        // Flash tongue
-        if (this.meshes[0]) {
-            const tongue = this.meshes[0].getObjectByName('tongue');
-            if (tongue) {
-                tongue.visible = true;
-                setTimeout(() => { tongue.visible = false; }, 200);
-            }
-        }
+    update(deltaTime) {
+        // Minimal animation for performance
+    }
+
+    getLength() {
+        return this.length;
     }
 
     getHeadPosition() {
@@ -347,7 +303,154 @@ export class Snake {
         return this.segments.map(seg => ({ x: seg.x, z: seg.z }));
     }
 
-    setGlowColor(color) {
-        // Not used in Slither.io style
+    setGlowColor(color) { }
+
+    setColor(color) {
+        // Update body material color
+        if (this.bodyMaterial) {
+            this.bodyMaterial.color.setHex(color);
+        }
+        // Update all body meshes (use 'meshes' not 'bodyMeshes')
+        if (this.meshes && this.meshes.length > 0) {
+            this.meshes.forEach(mesh => {
+                if (mesh && mesh.material) {
+                    mesh.material.color.setHex(color);
+                }
+            });
+        }
+        // Update connectors
+        if (this.connectors && this.connectors.length > 0) {
+            this.connectors.forEach(conn => {
+                if (conn && conn.material) {
+                    conn.material.color.setHex(color);
+                }
+            });
+        }
+        // Update head
+        if (this.headMesh) {
+            if (this.headMesh.material) {
+                this.headMesh.material.color.setHex(color);
+            }
+        }
+    }
+
+    setSkin(color, pattern) {
+        // Store current skin settings
+        this.currentSkinColor = color;
+        this.currentPattern = pattern;
+
+        // First set the base color
+        this.setColor(color);
+
+        // If pattern is 'none', just use solid color
+        if (pattern === 'none') {
+            this.bodyMaterial.map = null;
+            this.bodyMaterial.needsUpdate = true;
+            return;
+        }
+
+        // Create patterned texture
+        const texture = this.createPatternTexture(color, pattern);
+
+        // Update the body material with texture (so new segments get it)
+        this.bodyMaterial.map = texture;
+        this.bodyMaterial.needsUpdate = true;
+
+        // Apply to ALL existing meshes including connectors
+        if (this.meshes && this.meshes.length > 0) {
+            this.meshes.forEach((mesh, i) => {
+                if (mesh && mesh.material) {
+                    mesh.material.map = texture;
+                    mesh.material.needsUpdate = true;
+                }
+            });
+        }
+
+        // Apply to connectors
+        if (this.connectors && this.connectors.length > 0) {
+            this.connectors.forEach(conn => {
+                if (conn && conn.material) {
+                    conn.material.map = texture;
+                    conn.material.needsUpdate = true;
+                }
+            });
+        }
+    }
+
+    createPatternTexture(baseColor, pattern) {
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Convert hex color to CSS
+        const r = (baseColor >> 16) & 255;
+        const g = (baseColor >> 8) & 255;
+        const b = baseColor & 255;
+        const colorStr = `rgb(${r}, ${g}, ${b})`;
+        const lightColor = `rgb(${Math.min(255, r + 60)}, ${Math.min(255, g + 60)}, ${Math.min(255, b + 60)})`;
+
+        // Fill background
+        ctx.fillStyle = colorStr;
+        ctx.fillRect(0, 0, size, size);
+
+        // Draw pattern
+        ctx.fillStyle = lightColor;
+        ctx.strokeStyle = lightColor;
+        ctx.lineWidth = 2;
+
+        const cx = size / 2;
+        const cy = size / 2;
+        const patternSize = size * 0.35;
+
+        switch (pattern) {
+            case 'heart':
+                ctx.beginPath();
+                ctx.moveTo(cx, cy + patternSize * 0.3);
+                ctx.bezierCurveTo(cx - patternSize, cy - patternSize * 0.3, cx - patternSize, cy - patternSize, cx, cy - patternSize * 0.5);
+                ctx.bezierCurveTo(cx + patternSize, cy - patternSize, cx + patternSize, cy - patternSize * 0.3, cx, cy + patternSize * 0.3);
+                ctx.fill();
+                break;
+
+            case 'diamond':
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - patternSize);
+                ctx.lineTo(cx + patternSize * 0.7, cy);
+                ctx.lineTo(cx, cy + patternSize);
+                ctx.lineTo(cx - patternSize * 0.7, cy);
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'star':
+                const spikes = 5;
+                const outerRadius = patternSize;
+                const innerRadius = patternSize * 0.4;
+                ctx.beginPath();
+                for (let i = 0; i < spikes * 2; i++) {
+                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                    const angle = (Math.PI / spikes) * i - Math.PI / 2;
+                    const x = cx + Math.cos(angle) * radius;
+                    const y = cy + Math.sin(angle) * radius;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fill();
+                break;
+
+            case 'circle':
+                ctx.beginPath();
+                ctx.arc(cx, cy, patternSize * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Food - 3D Food Orbs with Particle Effects
+ * Food - Google Snake Style Red Apple
  */
 
 import * as THREE from 'three';
@@ -13,7 +13,6 @@ export class Food {
 
         this.position = { x: 0, z: 0 };
         this.mesh = null;
-        this.particles = null;
         this.magnetMode = false;
         this.magnetTarget = null;
 
@@ -23,85 +22,70 @@ export class Food {
     createMesh() {
         this.group = new THREE.Group();
 
-        // Main orb
-        const orbGeometry = new THREE.SphereGeometry(this.cellSize * 0.35, 32, 32);
-        const orbMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff6600,
-            emissive: 0xff6600,
-            emissiveIntensity: 0.6,
-            metalness: 0.5,
-            roughness: 0.2
+        // Apple body - red sphere
+        const appleGeometry = new THREE.SphereGeometry(this.cellSize * 0.35, 32, 32);
+        const appleMaterial = new THREE.MeshStandardMaterial({
+            color: 0xE53935,  // Nice red
+            roughness: 0.3,
+            metalness: 0.1
         });
-        this.mesh = new THREE.Mesh(orbGeometry, orbMaterial);
+        this.mesh = new THREE.Mesh(appleGeometry, appleMaterial);
+        this.mesh.scale.set(1, 0.9, 1);  // Slightly flattened like an apple
         this.mesh.castShadow = true;
         this.group.add(this.mesh);
 
-        // Inner glow
-        const glowGeometry = new THREE.SphereGeometry(this.cellSize * 0.25, 16, 16);
-        const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffff00,
-            transparent: true,
-            opacity: 0.8
+        // Apple stem - small brown cylinder
+        const stemGeometry = new THREE.CylinderGeometry(
+            this.cellSize * 0.03,  // top radius
+            this.cellSize * 0.04,  // bottom radius
+            this.cellSize * 0.12,  // height
+            8
+        );
+        const stemMaterial = new THREE.MeshStandardMaterial({
+            color: 0x5D4037,  // Brown
+            roughness: 0.8,
+            metalness: 0.0
         });
-        const innerGlow = new THREE.Mesh(glowGeometry, glowMaterial);
-        this.group.add(innerGlow);
+        const stem = new THREE.Mesh(stemGeometry, stemMaterial);
+        stem.position.y = this.cellSize * 0.35;
+        this.group.add(stem);
 
-        // Outer ring
-        const ringGeometry = new THREE.TorusGeometry(this.cellSize * 0.45, 0.02, 8, 32);
-        const ringMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff6600,
-            transparent: true,
-            opacity: 0.5
+        // Apple leaf - small green shape
+        const leafGeometry = new THREE.SphereGeometry(this.cellSize * 0.08, 8, 8);
+        const leafMaterial = new THREE.MeshStandardMaterial({
+            color: 0x4CAF50,  // Green
+            roughness: 0.5,
+            metalness: 0.0
         });
-        this.ring1 = new THREE.Mesh(ringGeometry, ringMaterial);
-        this.group.add(this.ring1);
+        const leaf = new THREE.Mesh(leafGeometry, leafMaterial);
+        leaf.scale.set(1.5, 0.3, 1);
+        leaf.position.set(this.cellSize * 0.08, this.cellSize * 0.35, 0);
+        leaf.rotation.z = -0.3;
+        this.group.add(leaf);
 
-        this.ring2 = new THREE.Mesh(ringGeometry, ringMaterial.clone());
-        this.ring2.rotation.x = Math.PI / 2;
-        this.group.add(this.ring2);
+        // Highlight spot on apple (shine)
+        const highlightGeometry = new THREE.SphereGeometry(this.cellSize * 0.08, 8, 8);
+        const highlightMaterial = new THREE.MeshBasicMaterial({
+            color: 0xFFFFFF,
+            transparent: true,
+            opacity: 0.4
+        });
+        const highlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
+        highlight.position.set(-this.cellSize * 0.15, this.cellSize * 0.1, this.cellSize * 0.2);
+        this.group.add(highlight);
 
-        // Particle aura
-        this.createParticleAura();
-
-        this.group.position.y = this.cellSize * 0.5;
+        this.group.position.y = this.cellSize * 0.35;
         this.scene.add(this.group);
-    }
-
-    createParticleAura() {
-        const particleCount = 20;
-        const particleGeometry = new THREE.BufferGeometry();
-        const positions = new Float32Array(particleCount * 3);
-
-        for (let i = 0; i < particleCount; i++) {
-            const angle = (i / particleCount) * Math.PI * 2;
-            const radius = this.cellSize * 0.5;
-            positions[i * 3] = Math.cos(angle) * radius;
-            positions[i * 3 + 1] = (Math.random() - 0.5) * this.cellSize * 0.3;
-            positions[i * 3 + 2] = Math.sin(angle) * radius;
-        }
-
-        particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-        const particleMaterial = new THREE.PointsMaterial({
-            color: 0xff8800,
-            size: 0.1,
-            transparent: true,
-            opacity: 0.8,
-            blending: THREE.AdditiveBlending
-        });
-
-        this.particles = new THREE.Points(particleGeometry, particleMaterial);
-        this.group.add(this.particles);
     }
 
     spawn(occupiedCells) {
         // Grid boundaries: -9 to 9 for a 20-cell grid (inside the walls)
-        const maxCoord = Math.floor(this.gridSize / 2) - 1; // 9 for gridSize 20
+        const maxCoord = Math.floor(this.gridSize / 2) - 1;
         let validPosition = false;
         let attempts = 0;
 
         while (!validPosition && attempts < 100) {
-            // Generate position from -maxCoord to maxCoord (e.g., -9 to 9)
+            // Generate position from -maxCoord to maxCoord
             this.position.x = Math.floor(Math.random() * (maxCoord * 2 + 1)) - maxCoord;
             this.position.z = Math.floor(Math.random() * (maxCoord * 2 + 1)) - maxCoord;
 
@@ -127,7 +111,7 @@ export class Food {
 
         // Spawn animation
         if (this.spawnAnimation) {
-            this.spawnAnimation.progress += deltaTime * 3;
+            this.spawnAnimation.progress += deltaTime * 4;
             const scale = Math.min(1, this.spawnAnimation.progress);
             const bounce = 1 + Math.sin(scale * Math.PI) * 0.2;
             this.group.scale.set(scale * bounce, scale * bounce, scale * bounce);
@@ -138,27 +122,11 @@ export class Food {
             }
         }
 
-        // Floating animation
-        this.group.position.y = this.cellSize * 0.5 + Math.sin(time * 3) * 0.1;
+        // Gentle bobbing animation
+        this.group.position.y = this.cellSize * 0.35 + Math.sin(time * 2) * 0.05;
 
-        // Rotate rings
-        this.ring1.rotation.z = time * 2;
-        this.ring2.rotation.y = time * 2;
-
-        // Pulse glow
-        if (this.mesh && this.mesh.material) {
-            this.mesh.material.emissiveIntensity = 0.5 + Math.sin(time * 4) * 0.2;
-        }
-
-        // Rotate particles
-        if (this.particles) {
-            this.particles.rotation.y = time;
-            const positions = this.particles.geometry.attributes.position.array;
-            for (let i = 0; i < positions.length; i += 3) {
-                positions[i + 1] = (Math.sin(time * 2 + i) * 0.5) * this.cellSize * 0.2;
-            }
-            this.particles.geometry.attributes.position.needsUpdate = true;
-        }
+        // Slow rotation
+        this.group.rotation.y = time * 0.5;
 
         // Magnet mode - move towards snake
         if (this.magnetMode && this.magnetTarget) {
@@ -186,14 +154,5 @@ export class Food {
     setMagnetMode(enabled, targetPos) {
         this.magnetMode = enabled;
         this.magnetTarget = targetPos;
-
-        // Visual feedback
-        if (enabled && this.mesh) {
-            this.mesh.material.color.setHex(0x00ffff);
-            this.mesh.material.emissive.setHex(0x00ffff);
-        } else if (this.mesh) {
-            this.mesh.material.color.setHex(0xff6600);
-            this.mesh.material.emissive.setHex(0xff6600);
-        }
     }
 }

@@ -137,8 +137,9 @@ export class Pathfinding {
     }
 
     inBounds(pos) {
-        return pos.x >= -this.halfGrid && pos.x < this.halfGrid &&
-            pos.z >= -this.halfGrid && pos.z < this.halfGrid;
+        const maxCoord = this.halfGrid - 1; // 9 for gridSize 20
+        return pos.x >= -maxCoord && pos.x <= maxCoord &&
+            pos.z >= -maxCoord && pos.z <= maxCoord;
     }
 
     key(pos) {

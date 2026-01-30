@@ -1,24 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SNAKE ARCADE | AI Autopilot</title>
-    <meta name="description" content="Next-gen 3D Snake Arcade powered by AI autopilot with cinematic visuals">
+    <title>SNAKE ARCADE</title>
+    <meta name="description" content="Next-gen 3D Snake Arcade with cinematic visuals">
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
     <!-- Loading Screen -->
     <div id="loading-screen">
-        <div class="loader">
-            <div class="loader-ring"></div>
-            <div class="loader-ring"></div>
-            <div class="loader-ring"></div>
-            <span class="loader-text">INITIALIZING AI</span>
+        <div class="snake-loader">
+            <div class="snake-segment"></div>
+            <div class="snake-segment"></div>
+            <div class="snake-segment"></div>
+            <div class="snake-segment"></div>
+            <div class="snake-segment"></div>
         </div>
+        <span class="loader-text">LOADING</span>
         <div class="loading-progress">
             <div class="progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="hidden">
+        <div class="auth-container">
+            <h1 class="auth-title">🐍 SNAKE ARCADE</h1>
+
+            <!-- Login Form -->
+            <div id="login-form" class="auth-form">
+                <h2 class="form-title">LOGIN</h2>
+                <div class="input-group">
+                    <label for="login-username">Username</label>
+                    <input type="text" id="login-username" placeholder="Enter username" autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <label for="login-password">Password</label>
+                    <input type="password" id="login-password" placeholder="Enter password"
+                        autocomplete="current-password">
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="remember-me">
+                    <label for="remember-me">Remember me</label>
+                </div>
+                <button id="login-btn" class="auth-btn primary">LOGIN</button>
+                <p class="auth-error hidden" id="login-error"></p>
+                <p class="auth-switch">Don't have an account? <a href="#" id="show-register">Register</a></p>
+            </div>
+
+            <!-- Register Form -->
+            <div id="register-form" class="auth-form hidden">
+                <h2 class="form-title">REGISTER</h2>
+                <div class="input-group">
+                    <label for="reg-display">Display Name</label>
+                    <input type="text" id="reg-display" placeholder="Your display name" autocomplete="name">
+                </div>
+                <div class="input-group">
+                    <label for="reg-username">Username</label>
+                    <input type="text" id="reg-username" placeholder="Choose username" autocomplete="username">
+                </div>
+                <div class="input-group">
+                    <label for="reg-password">Password</label>
+                    <input type="password" id="reg-password" placeholder="Choose password" autocomplete="new-password">
+                </div>
+                <button id="register-btn" class="auth-btn primary">REGISTER</button>
+                <p class="auth-error hidden" id="register-error"></p>
+                <p class="auth-switch">Already have an account? <a href="#" id="show-login">Login</a></p>
+            </div>
         </div>
     </div>
 
@@ -29,31 +85,32 @@
                 <span class="title-snake">SNAKE</span>
                 <span class="title-arcade">ARCADE</span>
             </h1>
-            <p class="subtitle">AI AUTOPILOT EDITION</p>
-            
+            <p class="subtitle">CLASSIC EDITION</p>
+
             <div class="menu-options">
                 <div class="ai-selector">
-                    <label>AI DIFFICULTY</label>
+                    <label>DIFFICULTY</label>
                     <div class="difficulty-buttons">
-                        <button class="diff-btn" data-level="beginner">BEGINNER</button>
-                        <button class="diff-btn active" data-level="pro">PRO</button>
-                        <button class="diff-btn" data-level="godmode">GOD MODE</button>
+                        <button class="diff-btn" data-level="easy">EASY</button>
+                        <button class="diff-btn active" data-level="normal">NORMAL</button>
+                        <button class="diff-btn" data-level="hard">HARD</button>
                     </div>
                 </div>
-                
+
                 <button id="start-btn" class="neon-btn primary">
-                    <span>LAUNCH AI</span>
+                    <span>PLAY</span>
                     <div class="btn-glow"></div>
                 </button>
-                
-                <button id="spectator-btn" class="neon-btn secondary">
-                    <span>SPECTATOR MODE</span>
-                </button>
+
+                <div class="menu-secondary-buttons">
+                    <button id="menu-skins-btn" class="neon-btn secondary">SKINS</button>
+                    <button id="menu-leaderboard-btn" class="neon-btn secondary">LEADERBOARD</button>
+                </div>
             </div>
-            
+
             <div class="menu-footer">
                 <span class="version">v1.0</span>
-                <span class="credits">AUTONOMOUS SNAKE INTELLIGENCE</span>
+                <span class="credits">SNAKE ARCADE</span>
             </div>
         </div>
     </div>
@@ -68,12 +125,8 @@
             <div class="combo-container">
                 <span id="combo-value" class="combo-value hidden">x2</span>
             </div>
-            <div class="ai-status">
-                <span class="ai-indicator"></span>
-                <span id="ai-mode">PRO AI</span>
-            </div>
         </div>
-        
+
         <div class="hud-left">
             <div class="stat-item">
                 <span class="stat-label">LENGTH</span>
@@ -84,15 +137,106 @@
                 <span id="time-value" class="stat-value">0:00</span>
             </div>
         </div>
-        
+
         <div class="hud-right">
             <div id="powerup-container" class="powerup-container"></div>
         </div>
-        
-        <div class="hud-bottom">
-            <button id="pause-btn" class="control-btn">⏸</button>
-            <button id="camera-btn" class="control-btn">🎥</button>
-            <button id="sound-btn" class="control-btn">🔊</button>
+    </div>
+
+    <!-- Premium Mobile Control Dock -->
+    <div id="mobile-controls">
+        <div class="mobile-dock">
+            <!-- Left Utility Column -->
+            <div class="dock-column dock-left">
+                <button id="mobile-menu-btn" class="dock-btn" title="Menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12h18M3 6h18M3 18h18" />
+                    </svg>
+                </button>
+                <button id="sound-btn" class="dock-btn" title="Sound">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 5L6 9H2v6h4l5 4V5z" />
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Center D-Pad -->
+            <div class="dpad-container">
+                <div class="dpad-base">
+                    <button id="arrow-up" class="dpad-btn dpad-up">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 4l-8 8h16z" />
+                        </svg>
+                    </button>
+                    <button id="arrow-left" class="dpad-btn dpad-left">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4 12l8-8v16z" />
+                        </svg>
+                    </button>
+                    <div class="dpad-center"></div>
+                    <button id="arrow-right" class="dpad-btn dpad-right">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 12l-8-8v16z" />
+                        </svg>
+                    </button>
+                    <button id="arrow-down" class="dpad-btn dpad-down">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 20l-8-8h16z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Utility Column -->
+            <div class="dock-column dock-right">
+                <button id="skin-btn" class="dock-btn" title="Skins">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                    </svg>
+                </button>
+                <button id="pause-btn" class="dock-btn" title="Pause">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="4" width="4" height="16" />
+                        <rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skin Selector Modal -->
+    <div id="skin-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 class="modal-title">CHOOSE SKIN</h3>
+            <div class="skin-options">
+                <button class="skin-option selected" data-skin="blue" style="background: #4169E1;">
+                    <span class="skin-icon">🔵</span>
+                    <span class="skin-name">SOLID</span>
+                </button>
+                <button class="skin-option" data-skin="green" style="background: #32CD32;">
+                    <span class="skin-icon">⚪</span>
+                    <span class="skin-name">CIRCLE</span>
+                </button>
+                <button class="skin-option" data-skin="red" style="background: #DC143C;">
+                    <span class="skin-icon">❤️</span>
+                    <span class="skin-name">HEART</span>
+                </button>
+                <button class="skin-option" data-skin="gold" style="background: #FFD700;">
+                    <span class="skin-icon">⭐</span>
+                    <span class="skin-name">STAR</span>
+                </button>
+                <button class="skin-option" data-skin="purple" style="background: #9932CC;">
+                    <span class="skin-icon">💎</span>
+                    <span class="skin-name">DIAMOND</span>
+                </button>
+                <button class="skin-option" data-skin="diamond"
+                    style="background: linear-gradient(135deg, #00ffff, #ff00ff);">
+                    <span class="skin-icon">✨</span>
+                    <span class="skin-name">PRISMA</span>
+                </button>
+            </div>
+            <button id="close-skin-modal" class="neon-btn">CLOSE</button>
         </div>
     </div>
 
@@ -116,6 +260,7 @@
             </div>
             <div class="game-over-buttons">
                 <button id="restart-btn" class="neon-btn primary">RESTART</button>
+                <button id="leaderboard-btn" class="neon-btn">🏆 LEADERBOARD</button>
                 <button id="menu-btn" class="neon-btn secondary">MENU</button>
             </div>
         </div>
@@ -125,13 +270,53 @@
     <div id="pause-screen" class="hidden">
         <div class="pause-container">
             <h2>PAUSED</h2>
-            <p>AI AUTOPILOT STANDBY</p>
+            <p>GAME PAUSED</p>
             <button id="resume-btn" class="neon-btn primary">RESUME</button>
         </div>
     </div>
 
+    <!-- Leaderboard Modal -->
+    <div id="leaderboard-modal" class="modal hidden">
+        <div class="modal-content leaderboard-modal">
+            <h3 class="modal-title">🏆 LEADERBOARD</h3>
+            <div class="leaderboard-tabs">
+                <button class="tab-btn active" data-tab="easy">EASY</button>
+                <button class="tab-btn" data-tab="normal">NORMAL</button>
+                <button class="tab-btn" data-tab="hard">HARD</button>
+            </div>
+            <div class="leaderboard-content">
+                <div id="leaderboard-easy" class="leaderboard-list active">
+                    <div class="loading-text">Loading...</div>
+                </div>
+                <div id="leaderboard-normal" class="leaderboard-list hidden">
+                    <div class="loading-text">Loading...</div>
+                </div>
+                <div id="leaderboard-hard" class="leaderboard-list hidden">
+                    <div class="loading-text">Loading...</div>
+                </div>
+            </div>
+            <button id="close-leaderboard" class="neon-btn">CLOSE</button>
+        </div>
+    </div>
+
     <!-- Three.js Canvas Container -->
-    <div id="game-container"></div>
+    <div id="game-container">
+        <!-- Live Leaderboard Panel -->
+        <div id="live-leaderboard" class="live-leaderboard">
+            <div class="lb-header">
+                <h4 class="lb-title">🏆 TOP 3</h4>
+                <button id="lb-minimize" class="lb-minimize">▼</button>
+            </div>
+            <div class="lb-tabs">
+                <button class="lb-tab active" data-diff="easy">EASY</button>
+                <button class="lb-tab" data-diff="normal">NORMAL</button>
+                <button class="lb-tab" data-diff="hard">HARD</button>
+            </div>
+            <div id="lb-list" class="lb-list">
+                <div class="lb-loading">Loading...</div>
+            </div>
+        </div>
+    </div>
 
     <!-- Import Maps for ES Modules -->
     <script type="importmap">
@@ -143,7 +328,25 @@
     }
     </script>
 
+    <!-- Chat Panel -->
+    <div id="chat-panel" class="chat-panel hidden">
+        <div class="chat-header">
+            <span class="chat-title">🐍 CHAT</span>
+            <span id="online-count" class="online-count">🟢 0 online</span>
+            <button id="chat-close" class="chat-close">×</button>
+        </div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="chat-input-wrapper">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." maxlength="200">
+            <button id="chat-send" class="chat-send">➤</button>
+        </div>
+    </div>
+
+    <!-- Chat Toggle Button -->
+    <button id="chat-toggle" class="chat-toggle">💬</button>
+
     <!-- Main Game Script -->
     <script type="module" src="js/main.js"></script>
 </body>
+
 </html>
