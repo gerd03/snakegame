@@ -44,6 +44,11 @@ class SnakeArcade {
         this.difficulty = 'normal';
         this.spectatorMode = false;
         this.score = 0;
+
+        // Load difficulty-specific highscores
+        this.highscores = JSON.parse(localStorage.getItem('snakeHighscores') || '{}');
+        this.highscore = this.highscores[this.difficulty] || 0;
+
         this.survivalTime = 0;
         this.lastMoveTime = 0;
         this.moveInterval = CONFIG.initialSpeed;
@@ -85,6 +90,7 @@ class SnakeArcade {
             comboText: document.getElementById('combo-text'),
             comboMultiplier: document.getElementById('combo-multiplier'),
             comboTimer: document.getElementById('combo-timer-bar'),
+            highscore: document.getElementById('highscore-value'),
             aiMode: document.getElementById('ai-mode'),
             finalScore: document.getElementById('final-score'),
             finalLength: document.getElementById('final-length'),
@@ -92,6 +98,7 @@ class SnakeArcade {
             leaderboard: document.getElementById('leaderboard-modal')
         };
 
+        this.lastChatCount = 0; // Track message count for auto-open
         this.init();
     }
 
@@ -108,9 +115,9 @@ class SnakeArcade {
     }
 
     async setupThreeJS() {
-        // Scene - bright sky background for Google Snake style
+        // Scene - truly transparent to show CSS image
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB);  // Light sky blue
+        this.scene.background = null;
 
         // Camera - centered top-down view
         this.camera = new THREE.PerspectiveCamera(
@@ -127,11 +134,15 @@ class SnakeArcade {
         this.camera.position.set(0, cameraHeight, 0.1);
         this.camera.lookAt(0, 0, 0);
 
-        // Renderer - Fixed 1:1 aspect ratio for proper game board display
+        // Renderer - transparent to show body background
         this.renderer = new THREE.WebGLRenderer({
             antialias: true,
-            powerPreference: 'high-performance'
+            alpha: true, // Enable transparency
+            powerPreference: 'high-performance',
+            premultipliedAlpha: false
         });
+        this.renderer.setClearColor(0x000000, 0); // Fully transparent black
+        this.renderer.setClearAlpha(0); // Explicitly set alpha to 0
 
         // Calculate available space for game canvas
         // Account for HUD (50px top) and controls (140px bottom on mobile)
@@ -183,9 +194,19 @@ class SnakeArcade {
     }
 
     async setupPostProcessing() {
-        this.composer = new EffectComposer(this.renderer);
+        // Create a render target with alpha support
+        const renderTarget = new THREE.WebGLRenderTarget(
+            this.renderer.domElement.width,
+            this.renderer.domElement.height,
+            {
+                format: THREE.RGBAFormat
+            }
+        );
+        this.composer = new EffectComposer(this.renderer, renderTarget);
 
         const renderPass = new RenderPass(this.scene, this.camera);
+        // Ensure RenderPass doesn't clear to an opaque color
+        renderPass.clearAlpha = 0;
         this.composer.addPass(renderPass);
 
         const bloomPass = new UnrealBloomPass(
@@ -324,6 +345,8 @@ class SnakeArcade {
                 document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 this.difficulty = e.target.dataset.level;
+                // Sync local highscore for selected difficulty
+                this.highscore = this.highscores[this.difficulty] || 0;
                 this.updateAIModeDisplay();
                 // Update leaderboard to show selected difficulty
                 this.updateLiveLeaderboardTab(this.difficulty);
@@ -575,7 +598,7 @@ class SnakeArcade {
         });
 
         // Initial load with current game difficulty
-        this.updateLiveLeaderboardTab(this.difficulty || 'normal');
+        this.updateLiveLeaderboardTab(this.difficulty);
     }
 
     updateLiveLeaderboardTab(difficulty) {
@@ -605,8 +628,9 @@ class SnakeArcade {
             if (scores.length === 0) {
                 listEl.innerHTML = '<div class="lb-empty">No scores yet!</div>';
             } else {
-                // Limit to top 3 for compact display
-                listEl.innerHTML = scores.slice(0, 3).map((score, index) => `
+                // Expanded to Top 25
+                const topScores = scores.slice(0, 25);
+                listEl.innerHTML = topScores.map((score, index) => `
                     <div class="lb-item">
                         <span class="lb-rank lb-rank-${index + 1}">${index + 1}</span>
                         <span class="lb-name">${score.display_name}</span>
@@ -697,6 +721,11 @@ class SnakeArcade {
             }
         }, 30000);
 
+        // Auto-refresh leaderboard every 20 seconds
+        this.lbRefreshInterval = setInterval(() => {
+            this.loadLiveLeaderboard(this.currentLbDifficulty || this.difficulty);
+        }, 20000);
+
         // Initial updates (only if logged in)
         if (supabase.isLoggedIn()) {
             this.loadChatMessages();
@@ -707,10 +736,20 @@ class SnakeArcade {
 
     async loadChatMessages() {
         const chatMessages = document.getElementById('chat-messages');
+        const chatPanel = document.getElementById('chat-panel');
         if (!chatMessages) return;
 
         try {
             const messages = await supabase.getMessages();
+
+            // Auto-open if new messages arrived
+            if (this.lastChatCount > 0 && messages.length > this.lastChatCount) {
+                if (chatPanel) {
+                    chatPanel.classList.remove('chat-minimized');
+                    chatPanel.classList.remove('hidden');
+                }
+            }
+            this.lastChatCount = messages.length;
 
             chatMessages.innerHTML = messages.map(msg => `
                 <div class="chat-message">
@@ -749,7 +788,8 @@ class SnakeArcade {
     activateCheat() {
         this.aiEnabled = !this.aiEnabled;
         this.cheatBuffer = '';
-        // Cheat is completely hidden - no indicator
+        console.log('[CHEAT] AI Autopilot:', this.aiEnabled ? 'ENABLED' : 'DISABLED');
+        this.updateAIModeDisplay();
     }
 
     changeSkin(skinName) {
@@ -779,6 +819,13 @@ class SnakeArcade {
             } else {
                 this.ui.auth.classList.remove('hidden');
             }
+            // Show promotion panel once loading is done
+            const promoPanel = document.getElementById('promo-panel');
+            if (promoPanel) {
+                promoPanel.classList.remove('hidden');
+            }
+            // Start playing menu music
+            this.audioManager.playMenuMusic();
         }, 2500);
     }
 
@@ -787,6 +834,9 @@ class SnakeArcade {
         this.state = GameState.PLAYING;
         this.score = 0;
         this.survivalTime = 0;
+
+        // Stop menu music and start gameplay music
+        this.audioManager.stopMenuMusic();
 
         // Speed based on difficulty: Easy=slow, Normal=medium, Hard=insane
         const difficultySpeed = {
@@ -855,9 +905,20 @@ class SnakeArcade {
         this.cameraController.shake(0.5);
         this.audioManager.playSound('death');
         this.audioManager.stopBGM();
+        this.audioManager.playMenuMusic(); // Play menu music on game over
 
         // Submit score to leaderboard
         this.submitScore();
+
+        // Auto-restart if AI is enabled (Continuous Loop)
+        if (this.aiEnabled) {
+            console.log('[CHEAT] AI active, auto-restarting in 2s...');
+            setTimeout(() => {
+                if (this.state === GameState.GAME_OVER) {
+                    this.restartGame();
+                }
+            }, 2000);
+        }
     }
 
     async submitScore() {
@@ -895,6 +956,8 @@ class SnakeArcade {
         this.ui.hud.classList.add('hidden');
         this.ui.menu.classList.remove('hidden');
         document.body.classList.remove('spectator-mode');
+        this.audioManager.stopBGM();
+        this.audioManager.playMenuMusic(); // Play menu music
     }
 
     toggleCameraMode() {
@@ -1037,6 +1100,9 @@ class SnakeArcade {
             this.ui.comboHud.classList.remove('combo-pop');
             void this.ui.comboHud.offsetWidth; // Trigger reflow
             this.ui.comboHud.classList.add('combo-pop');
+
+            // Play combo sound every time food is eaten
+            this.audioManager.playComboSound(comboData.label);
         }
     }
 
@@ -1066,6 +1132,16 @@ class SnakeArcade {
         this.ui.length.textContent = this.snake.length;
         this.ui.time.textContent = this.formatTime(this.survivalTime);
 
+        // Update highscore for current difficulty
+        if (this.score > this.highscore) {
+            this.highscore = this.score;
+            this.highscores[this.difficulty] = this.highscore;
+            localStorage.setItem('snakeHighscores', JSON.stringify(this.highscores));
+        }
+        if (this.ui.highscore) {
+            this.ui.highscore.textContent = this.highscore.toLocaleString();
+        }
+
         // Update Combo HUD
         const comboData = this.scoreManager.getComboData();
         if (comboData) {
@@ -1092,6 +1168,8 @@ class SnakeArcade {
             this.ui.comboHud.classList.add('hidden');
             this.ui.comboHud.classList.remove('combo-shake');
             this.ui.comboHud.classList.remove('combo-glow');
+            // Reset combo level tracking when combo breaks
+            this.audioManager.resetComboLevel();
         }
     }
 
@@ -1124,7 +1202,18 @@ class SnakeArcade {
     }
 
     updateAIModeDisplay() {
-        if (!this.ui.aiMode) return; // Element was removed
+        const aiIndicator = document.getElementById('ai-mode-indicator');
+        if (aiIndicator) {
+            if (this.aiEnabled) {
+                aiIndicator.classList.remove('hidden');
+                aiIndicator.style.display = 'block';
+            } else {
+                aiIndicator.classList.add('hidden');
+                aiIndicator.style.display = 'none';
+            }
+        }
+
+        if (!this.ui.aiMode) return;
         const modeNames = {
             beginner: 'BEGINNER AI',
             pro: 'PRO AI',
@@ -1171,9 +1260,9 @@ class SnakeArcade {
 
             this.update(deltaTime, elapsedTime);
 
-            // Render
-            this.arena.update(elapsedTime);
-            this.composer.render();
+            // Render (Bypassing composer to fix transparency)
+            this.renderer.render(this.scene, this.camera);
+            // this.composer.render();
         };
 
         loop();

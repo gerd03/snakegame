@@ -15,6 +15,9 @@
 </head>
 
 <body>
+    <!-- Background Layer -->
+    <div id="game-background"></div>
+
     <!-- Loading Screen -->
     <div id="loading-screen">
         <div class="snake-loader">
@@ -115,36 +118,55 @@
         </div>
     </div>
 
+
+
+    <!-- Left Promotion Panel -->
+    <div id="promo-panel" class="promo-panel hidden">
+        <h2 class="promo-header">PLAY SNAKE ARCADE ONLINE</h2>
+        <div class="qr-container">
+            <img src="SNAKE ARCADE PC QR.png" alt="SNAKE ARCADE PC QR" class="promo-qr">
+        </div>
+        <p class="promo-footer">Playable only for PC</p>
+    </div>
+
     <!-- Game HUD -->
     <div id="game-hud" class="hidden">
-        <div class="hud-top">
-            <div class="score-container">
-                <span class="score-label">SCORE</span>
-                <span id="score-value" class="score-value">0</span>
+        <!-- Top Stats Bar -->
+        <div class="hud-stats-bar">
+            <!-- AI Mode Indicator -->
+            <div id="ai-mode-indicator" class="ai-mode-indicator hidden">AI AUTO: ON</div>
+            <div class="stat-box">
+                <span class="stat-box-label">LENGTH</span>
+                <span id="length-value" class="stat-box-value">3</span>
             </div>
-            <div id="combo-hud" class="combo-hud hidden">
-                <div id="combo-text" class="combo-text"></div>
-                <div id="combo-multiplier" class="combo-multiplier"></div>
-                <div class="combo-timer-container">
-                    <div id="combo-timer-bar" class="combo-timer-bar"></div>
-                </div>
+            <div class="stat-box">
+                <span class="stat-box-label">SURVIVAL</span>
+                <span id="time-value" class="stat-box-value">0:00</span>
             </div>
-        </div>
-
-        <div class="hud-left">
-            <div class="stat-item">
-                <span class="stat-label">LENGTH</span>
-                <span id="length-value" class="stat-value">3</span>
+            <div class="stat-box score-box">
+                <span class="stat-box-label">SCORE</span>
+                <span id="score-value" class="stat-box-value score-highlight">0</span>
             </div>
-            <div class="stat-item">
-                <span class="stat-label">SURVIVAL</span>
-                <span id="time-value" class="stat-value">0:00</span>
+            <div class="stat-box highscore-box">
+                <span class="stat-box-label">HIGHEST</span>
+                <span id="highscore-value" class="stat-box-value highscore-highlight">0</span>
             </div>
         </div>
 
-        <div class="hud-right">
-            <div id="powerup-container" class="powerup-container"></div>
+    </div>
+
+    <!-- Combo HUD -->
+    <div id="combo-hud" class="combo-hud hidden">
+        <div id="combo-text" class="combo-text"></div>
+        <div id="combo-multiplier" class="combo-multiplier"></div>
+        <div class="combo-timer-container">
+            <div id="combo-timer-bar" class="combo-timer-bar"></div>
         </div>
+    </div>
+
+    <div class="hud-right">
+        <div id="powerup-container" class="powerup-container"></div>
+    </div>
     </div>
 
     <!-- Premium Mobile Control Dock -->
@@ -308,7 +330,7 @@
         <!-- Live Leaderboard Panel -->
         <div id="live-leaderboard" class="live-leaderboard">
             <div class="lb-header">
-                <h4 class="lb-title">🏆 TOP 3</h4>
+                <h4 class="lb-title">🏆 TOP 25</h4>
                 <button id="lb-minimize" class="lb-minimize">▼</button>
             </div>
             <div class="lb-tabs">

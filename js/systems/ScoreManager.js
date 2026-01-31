@@ -59,10 +59,10 @@ export class ScoreManager {
             label = 'UNSTOPPABLE!';
             color = '#ff6600'; // Neon orange
         } else if (this.combo >= 5) {
-            label = 'AMAZING!';
+            label = 'HOLY SHIT!';
             color = '#00ff88'; // Neon green
         } else if (this.combo >= 2) {
-            label = 'GREAT!';
+            label = 'COMBOWHORE!';
             color = '#00f0ff'; // Neon cyan
         }
 

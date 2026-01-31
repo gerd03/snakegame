@@ -163,7 +163,7 @@ class SupabaseClient {
     // Get top 5 leaderboard for difficulty
     async getLeaderboard(difficulty) {
         const results = await this.fetch(
-            `leaderboard?difficulty=eq.${difficulty}&select=display_name,score&order=score.desc&limit=5`
+            `leaderboard?difficulty=eq.${difficulty}&select=display_name,score&order=score.desc&limit=50`
         );
         return results;
     }
