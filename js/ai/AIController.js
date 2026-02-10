@@ -104,12 +104,16 @@ export class AIController {
             const shortcutMove = this.cycle.isValid()
                 ? this.getBestShortcutMove(head, moves, snake, foods)
                 : null;
+            const nearestFoodDistance = this.getClosestFoodDistance(head, foods);
 
             let selected = null;
 
             const shouldTakeShortcut =
                 !!shortcutMove &&
-                this.shouldPrioritizeShortcut(shortcutMove, cycleMove, snake.length);
+                (
+                    nearestFoodDistance <= 8 ||
+                    this.shouldPrioritizeShortcut(shortcutMove, cycleMove, snake.length)
+                );
 
             if (shouldTakeShortcut && (!cycleMove || shortcutMove.score >= cycleMove.score - this.getShortcutTolerance(snake.length))) {
                 selected = shortcutMove;
@@ -182,7 +186,7 @@ export class AIController {
             if (!this.validateCycleOrder(result.snake, true)) continue;
             if (!this.hasEscapeRoute(result.snake)) continue;
 
-            const score = this.scoreSurvivalState(result.snake, foods) + 420;
+            const score = this.scoreSurvivalState(result.snake, foods) + 520;
             if (!best || score > best.score) {
                 best = {
                     ...move,

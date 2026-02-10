@@ -4135,3 +4135,199 @@ body.spectator-mode #game-hud {
     font-weight: 700;
     letter-spacing: 0.3px;
 }
+
+/* ========================================
+   HOTFIX: COMBO + CHAT HEAD + REMOTE PAD
+   ======================================== */
+.chat-head-icon {
+    display: none;
+    width: 18px;
+    height: 18px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23EFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 6.5A3.5 3.5 0 0 1 6.5 3h11A3.5 3.5 0 0 1 21 6.5v6A3.5 3.5 0 0 1 17.5 16H9l-4 4v-4.1A3.5 3.5 0 0 1 3 12.5z'/%3E%3Cpath d='M8 8.5h8'/%3E%3Cpath d='M8 12h5'/%3E%3C/svg%3E");
+}
+
+#hud-header-right #chat-panel.chat-minimized .chat-head-icon,
+#chat-panel.chat-docked.chat-minimized .chat-head-icon {
+    display: inline-block !important;
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.6)) !important;
+}
+
+#hud-header-right #chat-panel.chat-minimized .chat-title::before,
+#chat-panel.chat-docked.chat-minimized .chat-title::before {
+    content: none !important;
+}
+
+@media (min-width: 769px) {
+    #game-hud .hud-stats-bar {
+        left: 12px !important;
+        right: 118px !important;
+        width: auto !important;
+        max-width: none !important;
+        transform: none !important;
+        justify-content: flex-start !important;
+    }
+
+    .combo-hud {
+        width: 188px !important;
+        margin-left: -94px !important;
+        padding: 4px 6px 3px !important;
+    }
+
+    .combo-text {
+        font-size: 0.84rem !important;
+        letter-spacing: 1.2px !important;
+    }
+
+    .combo-multiplier {
+        font-size: 1.72rem !important;
+    }
+}
+
+@media (max-width: 768px) {
+    #game-hud .hud-stats-bar {
+        left: 6px !important;
+        right: 98px !important;
+        width: auto !important;
+        max-width: none !important;
+        transform: none !important;
+        justify-content: flex-start !important;
+        gap: 3px !important;
+        padding: 2px !important;
+    }
+
+    #game-hud .stat-box {
+        min-width: 54px !important;
+        padding: 4px 5px !important;
+    }
+
+    #game-hud .stat-box-label {
+        font-size: 0.4rem !important;
+        letter-spacing: 0.45px !important;
+    }
+
+    #game-hud .stat-box-value {
+        font-size: 0.88rem !important;
+    }
+
+    #hud-header-right {
+        top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+        right: calc(8px + env(safe-area-inset-right, 0px)) !important;
+        gap: 6px !important;
+    }
+
+    #hud-header-right #chat-panel.chat-minimized,
+    #chat-panel.chat-docked.chat-minimized,
+    .logout-profile-btn {
+        width: 38px !important;
+        height: 38px !important;
+        max-height: 38px !important;
+        border-radius: 10px !important;
+    }
+
+    .logout-profile-btn .profile-initial {
+        width: 19px !important;
+        height: 19px !important;
+        font-size: 0.62rem !important;
+    }
+
+    .combo-hud {
+        width: 138px !important;
+        margin-left: -69px !important;
+        padding: 3px 5px 3px !important;
+        z-index: 124 !important;
+    }
+
+    .combo-text {
+        font-size: 0.56rem !important;
+        letter-spacing: 0.75px !important;
+    }
+
+    .combo-multiplier {
+        font-size: 1.2rem !important;
+        line-height: 1 !important;
+    }
+
+    .combo-timer-container {
+        width: 76px !important;
+        height: 4px !important;
+        margin-top: 3px !important;
+    }
+
+    #mobile-controls .dpad-base {
+        width: 140px !important;
+        height: 140px !important;
+        border: 12px solid #9b9b9b !important;
+        background: #dcdcdc !important;
+        box-shadow:
+            0 8px 20px rgba(0, 0, 0, 0.32),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.4) !important;
+    }
+
+    #mobile-controls .dpad-btn {
+        inset: 12px !important;
+        width: auto !important;
+        height: auto !important;
+        border: none !important;
+        border-radius: 50% !important;
+        background: #e9e9e9 !important;
+        color: #8a8a8a !important;
+        box-shadow: none !important;
+    }
+
+    #mobile-controls .dpad-up {
+        clip-path: polygon(50% 4%, 86% 36%, 64% 56%, 36% 56%, 14% 36%) !important;
+    }
+
+    #mobile-controls .dpad-right {
+        clip-path: polygon(96% 50%, 64% 14%, 44% 36%, 44% 64%, 64% 86%) !important;
+    }
+
+    #mobile-controls .dpad-down {
+        clip-path: polygon(50% 96%, 86% 64%, 64% 44%, 36% 44%, 14% 64%) !important;
+    }
+
+    #mobile-controls .dpad-left {
+        clip-path: polygon(4% 50%, 36% 14%, 56% 36%, 56% 64%, 36% 86%) !important;
+    }
+
+    #mobile-controls .dpad-up svg {
+        transform: translateY(-24px) !important;
+    }
+
+    #mobile-controls .dpad-right svg {
+        transform: translateX(24px) !important;
+    }
+
+    #mobile-controls .dpad-down svg {
+        transform: translateY(24px) !important;
+    }
+
+    #mobile-controls .dpad-left svg {
+        transform: translateX(-24px) !important;
+    }
+
+    #mobile-controls .dpad-btn.direction-active {
+        background: #ffffff !important;
+        color: #5f5f5f !important;
+        box-shadow: inset 0 0 0 2px #b9b9b9 !important;
+    }
+
+    #mobile-controls .dpad-center {
+        width: 70px !important;
+        height: 70px !important;
+        background: #9f9f9f !important;
+        border: 2px solid #8f8f8f !important;
+        pointer-events: none !important;
+    }
+
+    #mobile-controls .dpad-center::before {
+        content: 'enter' !important;
+        color: #f4f4f4 !important;
+        font-size: 0.9rem !important;
+        letter-spacing: 0.2px !important;
+        text-transform: lowercase !important;
+    }
+}

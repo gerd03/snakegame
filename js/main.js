@@ -1153,6 +1153,7 @@ class SnakeArcade {
         this.updatePromoVisibility();
         this.updateProfileButton();
         this.setDirectionIndicator(this.snake.getDirection());
+        this.updateComboLayout();
 
         if (spectator) {
             document.body.classList.add('spectator-mode');
@@ -1198,6 +1199,7 @@ class SnakeArcade {
         this.updatePromoVisibility();
         this.updateProfileButton();
         this.clearDirectionIndicator();
+        this.updateComboLayout();
 
         // Effects
         this.particles.createDeathExplosion(this.snake.getHeadPosition());
@@ -1237,6 +1239,7 @@ class SnakeArcade {
         this.updatePromoVisibility();
         this.updateProfileButton();
         this.clearDirectionIndicator();
+        this.updateComboLayout();
 
         this.audioManager.stopBGM();
         this.audioManager.playSound('collect');
@@ -1284,6 +1287,7 @@ class SnakeArcade {
         this.updatePromoVisibility();
         this.updateProfileButton();
         this.clearDirectionIndicator();
+        this.updateComboLayout();
         this.audioManager.stopBGM();
         this.audioManager.playMenuMusic(); // Play menu music
     }
@@ -1629,6 +1633,37 @@ class SnakeArcade {
             this.audioManager.resetComboLevel();
             this.lastComboBurstLabel = null;
         }
+
+        this.updateComboLayout();
+    }
+
+    updateComboLayout() {
+        const combo = this.ui.comboHud;
+        if (!combo) return;
+
+        const isMobile = window.innerWidth <= 768;
+        if (!isMobile) {
+            combo.style.removeProperty('top');
+            combo.style.setProperty('bottom', '20px', 'important');
+            return;
+        }
+
+        const canvas = this.renderer?.domElement;
+        const controls = document.getElementById('mobile-controls');
+        if (!canvas || !controls) return;
+
+        const boardRect = canvas.getBoundingClientRect();
+        const controlsRect = controls.getBoundingClientRect();
+        const comboRect = combo.getBoundingClientRect();
+        const comboHeight = Math.max(52, Math.round(comboRect.height || 64));
+
+        const desiredTop = Math.round(boardRect.bottom - comboHeight - 6);
+        const maxTop = Math.round(controlsRect.top - comboHeight - 8);
+        const minTop = Math.round(boardRect.top + 8);
+        const safeTop = Math.max(minTop, Math.min(desiredTop, maxTop));
+
+        combo.style.setProperty('top', `${safeTop}px`, 'important');
+        combo.style.setProperty('bottom', 'auto', 'important');
     }
 
     updatePowerUpUI() {
@@ -1749,6 +1784,7 @@ class SnakeArcade {
         this.composer.setSize(gameSize, gameSize);
         this.applyOverlayUX();
         this.updatePromoVisibility();
+        this.updateComboLayout();
     }
 
     animate() {
