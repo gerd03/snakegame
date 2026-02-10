@@ -18,15 +18,25 @@ import { AudioManager } from './audio/AudioManager.js';
 import { ParticleSystem } from './effects/ParticleSystem.js';
 import { Bomb } from './Bomb.js';
 import { supabase } from './supabase.js';
+import { GridBounds } from './core/GridBounds.js';
 
 // Game Configuration
 const CONFIG = {
-    gridSize: 20,
+    gridWidth: 20,
+    gridHeight: 20,
     cellSize: 1,
     initialSpeed: 0.08, // Fast snake for high scores
     minSpeed: 0.03,     // Even faster at max speed
     speedIncrement: 0.001,
-    pointsPerFood: 100  // Higher points to reach 100,000+
+    pointsPerFood: 100, // Higher points to reach 100,000+
+    fruitBurst: {
+        fiveFruitChance: 0.2,
+        tenFruitChance: 0.08,
+        maxFruitsPerBatch: 20
+    },
+    hudUpdateInterval: 0.1,
+    aiNoPathAssistThreshold: 20,
+    aiStallGrowthInterval: 16
 };
 
 // Game State
@@ -44,6 +54,13 @@ class SnakeArcade {
         this.difficulty = 'normal';
         this.spectatorMode = false;
         this.score = 0;
+        this.gridBounds = new GridBounds({
+            width: CONFIG.gridWidth,
+            height: CONFIG.gridHeight,
+            cellSize: CONFIG.cellSize,
+            minX: -10,
+            minZ: -10
+        });
 
         // Load difficulty-specific highscores
         this.highscores = JSON.parse(localStorage.getItem('snakeHighscores') || '{}');
@@ -52,11 +69,20 @@ class SnakeArcade {
         this.survivalTime = 0;
         this.lastMoveTime = 0;
         this.moveInterval = CONFIG.initialSpeed;
+        this.hudRefreshTimer = 0;
+        this.lastComboBurstLabel = null;
+        this.manualBombQueue = 0;
+        this.forcedBombMode = false;
+        this.aiNoFoodPathTicks = 0;
+        this.aiStepsWithoutFood = 0;
 
         // Manual control
         this.manualDirection = null;
         this.aiEnabled = false; // AI starts OFF - manual mode by default
         this.cheatBuffer = ''; // Buffer for hidden CHEAT code
+        this.mobileDifficultyTapCount = 0;
+        this.mobileDifficultyTapLastAt = 0;
+        this.mobileDifficultyTapWindowMs = 1600;
 
         // Three.js
         this.scene = null;
@@ -82,6 +108,7 @@ class SnakeArcade {
             menu: document.getElementById('main-menu'),
             hud: document.getElementById('game-hud'),
             gameOver: document.getElementById('game-over'),
+            gameOverTitle: document.querySelector('#game-over .game-over-title'),
             pause: document.getElementById('pause-screen'),
             score: document.getElementById('score-value'),
             length: document.getElementById('length-value'),
@@ -98,7 +125,15 @@ class SnakeArcade {
             leaderboard: document.getElementById('leaderboard-modal')
         };
 
+        this.directionButtons = {
+            up: document.getElementById('arrow-up'),
+            down: document.getElementById('arrow-down'),
+            left: document.getElementById('arrow-left'),
+            right: document.getElementById('arrow-right')
+        };
+
         this.lastChatCount = 0; // Track message count for auto-open
+        this.chatUnreadCount = 0;
         this.init();
     }
 
@@ -118,6 +153,7 @@ class SnakeArcade {
         // Scene - truly transparent to show CSS image
         this.scene = new THREE.Scene();
         this.scene.background = null;
+        const isMobile = window.innerWidth <= 768;
 
         // Camera - centered top-down view
         this.camera = new THREE.PerspectiveCamera(
@@ -128,7 +164,7 @@ class SnakeArcade {
         );
         // Position camera directly above center, looking down at arena
         // Since we use a fixed 1:1 aspect ratio canvas, camera height is constant
-        const cameraHeight = 35;
+        const cameraHeight = this.getTopDownCameraHeight(isMobile);
 
         // Position camera directly above center
         this.camera.position.set(0, cameraHeight, 0.1);
@@ -136,7 +172,7 @@ class SnakeArcade {
 
         // Renderer - transparent to show body background
         this.renderer = new THREE.WebGLRenderer({
-            antialias: true,
+            antialias: !isMobile,
             alpha: true, // Enable transparency
             powerPreference: 'high-performance',
             premultipliedAlpha: false
@@ -145,11 +181,7 @@ class SnakeArcade {
         this.renderer.setClearAlpha(0); // Explicitly set alpha to 0
 
         // Calculate available space for game canvas
-        // Account for HUD (50px top) and controls (140px bottom on mobile)
-        const isMobile = window.innerWidth <= 768;
-        const hudHeight = 50;
-        const controlsHeight = isMobile ? 140 : 0;
-        const padding = 10;
+        const { hudHeight, controlsHeight, padding } = this.getViewportLayout(isMobile);
 
         const availableWidth = window.innerWidth - (padding * 2);
         const availableHeight = window.innerHeight - hudHeight - controlsHeight - (padding * 2);
@@ -158,7 +190,7 @@ class SnakeArcade {
         const gameSize = Math.min(availableWidth, availableHeight);
 
         this.renderer.setSize(gameSize, gameSize);
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.setPixelRatio(this.getTargetPixelRatio(isMobile));
         // Shadows disabled for better performance
         this.renderer.shadowMap.enabled = false;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -220,26 +252,27 @@ class SnakeArcade {
 
     async createGameObjects() {
         // Arena
-        this.arena = new Arena(this.scene, CONFIG.gridSize, CONFIG.cellSize);
+        this.arena = new Arena(this.scene, this.gridBounds);
 
         // Snake
-        this.snake = new Snake(this.scene, CONFIG.gridSize, CONFIG.cellSize);
+        this.snake = new Snake(this.scene, this.gridBounds);
 
         // Food
-        this.food = new Food(this.scene, CONFIG.gridSize, CONFIG.cellSize);
+        this.food = new Food(this.scene, this.gridBounds, CONFIG.fruitBurst);
         this.food.spawn(this.snake.getOccupiedCells());
 
         // Particle System
         this.particles = new ParticleSystem(this.scene);
 
         // AI Controller
-        this.ai = new AIController(CONFIG.gridSize, this.difficulty);
+        this.ai = new AIController(this.gridBounds, this.difficulty);
 
         // Camera Controller
         this.cameraController = new CameraController(this.camera, this.snake);
+        this.applyCameraFraming(window.innerWidth <= 768);
 
         // Power-up Manager
-        this.powerUpManager = new PowerUpManager(this.scene, CONFIG.gridSize, CONFIG.cellSize);
+        this.powerUpManager = new PowerUpManager(this.scene, this.gridBounds);
 
         // Score Manager
         this.scoreManager = new ScoreManager();
@@ -248,7 +281,7 @@ class SnakeArcade {
         this.audioManager = new AudioManager();
 
         // Bomb Hazard
-        this.bomb = new Bomb(this.scene, CONFIG.gridSize, CONFIG.cellSize);
+        this.bomb = new Bomb(this.scene, this.gridBounds);
         this.bombSpawnTimer = 0;
         this.bombSpawnInterval = 8; // Spawn bomb every 8 seconds
     }
@@ -298,6 +331,7 @@ class SnakeArcade {
                 this.ui.auth.classList.add('hidden');
                 this.ui.menu.classList.remove('hidden');
                 this.state = GameState.MENU;
+                this.updatePromoVisibility();
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -328,6 +362,7 @@ class SnakeArcade {
                 this.ui.auth.classList.add('hidden');
                 this.ui.menu.classList.remove('hidden');
                 this.state = GameState.MENU;
+                this.updatePromoVisibility();
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -350,6 +385,7 @@ class SnakeArcade {
                 this.updateAIModeDisplay();
                 // Update leaderboard to show selected difficulty
                 this.updateLiveLeaderboardTab(this.difficulty);
+                this.handleMobileDifficultyTap();
             });
         });
 
@@ -388,6 +424,7 @@ class SnakeArcade {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') this.togglePause();
             if (e.key === ' ' && this.state === GameState.MENU) this.startGame();
+            if (this.handleHiddenHotkeys(e)) return;
 
             // Arrow key controls
             if (this.state === GameState.PLAYING) {
@@ -439,10 +476,11 @@ class SnakeArcade {
         // Skin options
         document.querySelectorAll('.skin-option').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                const skin = e.target.dataset.skin;
+                const button = e.currentTarget;
+                const skin = button?.dataset?.skin;
                 this.changeSkin(skin);
                 document.querySelectorAll('.skin-option').forEach(b => b.classList.remove('selected'));
-                e.target.classList.add('selected');
+                button.classList.add('selected');
             });
         });
 
@@ -649,21 +687,48 @@ class SnakeArcade {
         const chatInput = document.getElementById('chat-input');
         const chatSend = document.getElementById('chat-send');
         const chatClose = document.getElementById('chat-close');
+        const chatDock = document.getElementById('hud-header-right');
 
-        if (!chatInput || !chatSend) return;
+        if (!chatPanel || !chatInput || !chatSend) return;
+
+        if (chatDock && chatPanel.parentElement !== chatDock) {
+            chatDock.appendChild(chatPanel);
+        }
+
+        let unreadBadge = document.getElementById('chat-unread-badge');
+        if (!unreadBadge) {
+            unreadBadge = document.createElement('span');
+            unreadBadge.id = 'chat-unread-badge';
+            unreadBadge.className = 'chat-unread-badge hidden';
+            chatPanel.appendChild(unreadBadge);
+        }
+
+        this.updateChatUnreadBadge = () => {
+            if (!unreadBadge) return;
+            if (this.chatUnreadCount > 0) {
+                unreadBadge.textContent = this.chatUnreadCount > 99 ? '99+' : `${this.chatUnreadCount}`;
+                unreadBadge.classList.remove('hidden');
+            } else {
+                unreadBadge.classList.add('hidden');
+            }
+        };
+        this.updateChatUnreadBadge();
 
         // Close button minimizes to chat head
         if (chatClose) {
             chatClose.addEventListener('click', (e) => {
                 e.stopPropagation();
                 chatPanel.classList.add('chat-minimized');
+                this.applyOverlayUX({ forceChatMinimized: true });
             });
         }
 
         // Clicking minimized chat expands it
-        chatPanel.addEventListener('click', (e) => {
+        chatPanel.addEventListener('click', () => {
             if (chatPanel.classList.contains('chat-minimized')) {
                 chatPanel.classList.remove('chat-minimized');
+                this.chatUnreadCount = 0;
+                this.updateChatUnreadBadge();
             }
         });
 
@@ -689,6 +754,8 @@ class SnakeArcade {
                 await supabase.sendMessage(message);
                 console.log('[CHAT] Message sent successfully!');
                 chatInput.value = '';
+                this.chatUnreadCount = 0;
+                this.updateChatUnreadBadge();
                 await this.loadChatMessages();
             } catch (err) {
                 console.error('[CHAT] Failed to send message:', err);
@@ -742,14 +809,25 @@ class SnakeArcade {
         try {
             const messages = await supabase.getMessages();
 
-            // Auto-open if new messages arrived
-            if (this.lastChatCount > 0 && messages.length > this.lastChatCount) {
-                if (chatPanel) {
+            const incomingCount = Math.max(0, messages.length - this.lastChatCount);
+
+            if (incomingCount > 0 && chatPanel) {
+                const isGameplay = this.state === GameState.PLAYING;
+                const isMobile = window.innerWidth <= 768;
+
+                chatPanel.classList.remove('hidden');
+
+                if (isGameplay || isMobile) {
+                    this.chatUnreadCount += incomingCount;
+                } else {
                     chatPanel.classList.remove('chat-minimized');
-                    chatPanel.classList.remove('hidden');
+                    this.chatUnreadCount = 0;
                 }
             }
             this.lastChatCount = messages.length;
+            if (typeof this.updateChatUnreadBadge === 'function') {
+                this.updateChatUnreadBadge();
+            }
 
             chatMessages.innerHTML = messages.map(msg => `
                 <div class="chat-message">
@@ -758,8 +836,13 @@ class SnakeArcade {
                 </div>
             `).join('');
 
-            // Auto-scroll to bottom
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            if (chatPanel && !chatPanel.classList.contains('chat-minimized')) {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                this.chatUnreadCount = 0;
+                if (typeof this.updateChatUnreadBadge === 'function') {
+                    this.updateChatUnreadBadge();
+                }
+            }
         } catch (err) {
             console.error('Failed to load messages:', err);
         }
@@ -771,7 +854,7 @@ class SnakeArcade {
 
         try {
             const count = await supabase.getOnlineCount();
-            onlineCountEl.textContent = `🟢 ${count} online`;
+            onlineCountEl.textContent = `${count} online`;
         } catch (err) {
             console.error('Failed to update online count:', err);
         }
@@ -783,13 +866,87 @@ class SnakeArcade {
         const current = this.snake.direction;
         if (current.x === -x && current.z === -z) return;
         this.manualDirection = { x, z };
+        this.setDirectionIndicator(this.manualDirection);
+    }
+
+    handleHiddenHotkeys(e) {
+        if (this.state !== GameState.PLAYING || e.repeat) return false;
+
+        switch (e.key) {
+            case '1':
+                e.preventDefault();
+                this.forceFruitBatch(5);
+                return true;
+            case '2':
+                e.preventDefault();
+                this.forceFruitBatch(10);
+                return true;
+            case '3':
+                e.preventDefault();
+                this.forceFruitBatch(20);
+                return true;
+            case '4':
+                e.preventDefault();
+                this.manualBombQueue += 5;
+                this.forcedBombMode = true;
+                return true;
+            case '5':
+                e.preventDefault();
+                this.restartGame();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    getComboBurstFruitCount(label) {
+        const burstByCombo = {
+            'COMBOWHORE!': 5,
+            'UNSTOPPABLE!': 10,
+            'GODLIKE!': 20
+        };
+        return burstByCombo[label] || 0;
+    }
+
+    forceFruitBatch(count) {
+        if (this.state !== GameState.PLAYING) return false;
+        const spawned = this.food.spawn(this.snake.getOccupiedCells(), count);
+        if (!spawned) {
+            this.winGame();
+            return false;
+        }
+        return true;
     }
 
     activateCheat() {
-        this.aiEnabled = !this.aiEnabled;
         this.cheatBuffer = '';
-        console.log('[CHEAT] AI Autopilot:', this.aiEnabled ? 'ENABLED' : 'DISABLED');
+        this.toggleAutopilot('CHEAT');
+    }
+
+    toggleAutopilot(source = 'CHEAT') {
+        this.aiEnabled = !this.aiEnabled;
+        if (this.ai && typeof this.ai.resetState === 'function') {
+            this.ai.resetState();
+        }
+        console.log(`[${source}] AI Autopilot:`, this.aiEnabled ? 'ENABLED' : 'DISABLED');
         this.updateAIModeDisplay();
+    }
+
+    handleMobileDifficultyTap() {
+        if (window.innerWidth > 768) return;
+
+        const now = performance.now();
+        if (now - this.mobileDifficultyTapLastAt > this.mobileDifficultyTapWindowMs) {
+            this.mobileDifficultyTapCount = 0;
+        }
+
+        this.mobileDifficultyTapLastAt = now;
+        this.mobileDifficultyTapCount += 1;
+
+        if (this.mobileDifficultyTapCount < 5) return;
+
+        this.mobileDifficultyTapCount = 0;
+        this.toggleAutopilot('MOBILE-5-TAP');
     }
 
     changeSkin(skinName) {
@@ -800,7 +957,7 @@ class SnakeArcade {
             red: { color: 0xDC143C, pattern: 'heart' },
             gold: { color: 0xFFD700, pattern: 'star' },
             purple: { color: 0x9932CC, pattern: 'diamond' },
-            diamond: { color: 0x00FFFF, pattern: 'diamond' }
+            diamond: { color: 0x00FFFF, pattern: 'prisma' }
         };
 
         const skin = skins[skinName] || skins.blue;
@@ -819,14 +976,74 @@ class SnakeArcade {
             } else {
                 this.ui.auth.classList.remove('hidden');
             }
-            // Show promotion panel once loading is done
-            const promoPanel = document.getElementById('promo-panel');
-            if (promoPanel) {
-                promoPanel.classList.remove('hidden');
+            this.updatePromoVisibility();
+
+            const chatPanel = document.getElementById('chat-panel');
+            if (chatPanel) {
+                chatPanel.classList.remove('hidden');
+                chatPanel.classList.add('chat-minimized');
             }
+
+            this.applyOverlayUX({ forceChatMinimized: true });
+
             // Start playing menu music
             this.audioManager.playMenuMusic();
         }, 2500);
+    }
+
+    updatePromoVisibility() {
+        const promoPanel = document.getElementById('promo-panel');
+        if (!promoPanel) return;
+
+        const isDesktop = window.innerWidth > 768;
+        const isMenuState = this.state === GameState.MENU;
+        const loadingDone = this.ui.loading?.classList.contains('hidden');
+        const authHidden = this.ui.auth?.classList.contains('hidden');
+        const shouldShow = isDesktop && isMenuState && loadingDone && authHidden;
+
+        promoPanel.classList.toggle('hidden', !shouldShow);
+    }
+
+    getDirectionButtonKey(direction) {
+        if (!direction) return null;
+        if (direction.x === 0 && direction.z === -1) return 'up';
+        if (direction.x === 0 && direction.z === 1) return 'down';
+        if (direction.x === -1 && direction.z === 0) return 'left';
+        if (direction.x === 1 && direction.z === 0) return 'right';
+        return null;
+    }
+
+    clearDirectionIndicator() {
+        Object.values(this.directionButtons).forEach(btn => {
+            if (btn) btn.classList.remove('direction-active');
+        });
+    }
+
+    setDirectionIndicator(direction) {
+        this.clearDirectionIndicator();
+        const key = this.getDirectionButtonKey(direction);
+        if (!key) return;
+
+        const button = this.directionButtons[key];
+        if (button) button.classList.add('direction-active');
+    }
+
+    applyOverlayUX(options = {}) {
+        const { forceChatMinimized = false } = options;
+        const chatPanel = document.getElementById('chat-panel');
+        if (!chatPanel) return;
+
+        const isMobile = window.innerWidth <= 768;
+        const isGameState = this.state === GameState.PLAYING || this.state === GameState.PAUSED;
+        const shouldMinimizeChat = forceChatMinimized || isMobile || isGameState;
+
+        chatPanel.classList.toggle('chat-in-game', isMobile && isGameState);
+        chatPanel.classList.toggle('chat-in-menu', isMobile && this.state === GameState.MENU);
+        chatPanel.classList.add('chat-docked');
+
+        if (shouldMinimizeChat) {
+            chatPanel.classList.add('chat-minimized');
+        }
     }
 
     startGame(spectator = false) {
@@ -834,18 +1051,30 @@ class SnakeArcade {
         this.state = GameState.PLAYING;
         this.score = 0;
         this.survivalTime = 0;
+        if (this.ui.gameOverTitle) {
+            this.ui.gameOverTitle.textContent = 'GAME OVER';
+        }
 
         // Stop menu music and start gameplay music
         this.audioManager.stopMenuMusic();
 
         // Speed based on difficulty: Easy=slow, Normal=medium, Hard=insane
         const difficultySpeed = {
-            beginner: 0.15,  // Slow - easier to control
-            pro: 0.08,       // Normal - balanced gameplay
-            godmode: 0.04    // Insane fast - challenging!
+            easy: 0.15,
+            normal: 0.08,
+            hard: 0.04,
+            beginner: 0.15,  // Legacy alias
+            pro: 0.08,       // Legacy alias
+            godmode: 0.04    // Legacy alias
         };
         this.moveInterval = difficultySpeed[this.difficulty] || CONFIG.initialSpeed;
         this.lastMoveTime = 0;
+        this.hudRefreshTimer = CONFIG.hudUpdateInterval;
+        this.lastComboBurstLabel = null;
+        this.manualBombQueue = 0;
+        this.forcedBombMode = false;
+        this.aiNoFoodPathTicks = 0;
+        this.aiStepsWithoutFood = 0;
 
         // Reset game objects
         this.snake.reset();
@@ -853,6 +1082,9 @@ class SnakeArcade {
         this.powerUpManager.reset();
         this.scoreManager.reset();
         this.ai.setDifficulty(this.difficulty);
+        if (this.ai && typeof this.ai.resetState === 'function') {
+            this.ai.resetState();
+        }
 
         // Reset bomb
         this.bomb.deactivate();
@@ -863,6 +1095,9 @@ class SnakeArcade {
         this.ui.gameOver.classList.add('hidden');
         this.ui.hud.classList.remove('hidden');
         this.updateHUD();
+        this.applyOverlayUX({ forceChatMinimized: true });
+        this.updatePromoVisibility();
+        this.setDirectionIndicator(this.snake.getDirection());
 
         if (spectator) {
             document.body.classList.add('spectator-mode');
@@ -880,15 +1115,20 @@ class SnakeArcade {
             this.state = GameState.PAUSED;
             this.ui.pause.classList.remove('hidden');
             this.audioManager.pause();
+            this.applyOverlayUX();
         } else if (this.state === GameState.PAUSED) {
             this.state = GameState.PLAYING;
             this.ui.pause.classList.add('hidden');
             this.audioManager.resume();
+            this.applyOverlayUX({ forceChatMinimized: true });
         }
     }
 
     gameOver() {
         this.state = GameState.GAME_OVER;
+        if (this.ui.gameOverTitle) {
+            this.ui.gameOverTitle.textContent = 'GAME OVER';
+        }
 
         // Update final stats
         this.ui.finalScore.textContent = this.score;
@@ -899,6 +1139,9 @@ class SnakeArcade {
         this.ui.hud.classList.add('hidden');
         this.ui.gameOver.classList.remove('hidden');
         document.body.classList.remove('spectator-mode');
+        this.applyOverlayUX({ forceChatMinimized: true });
+        this.updatePromoVisibility();
+        this.clearDirectionIndicator();
 
         // Effects
         this.particles.createDeathExplosion(this.snake.getHeadPosition());
@@ -919,6 +1162,30 @@ class SnakeArcade {
                 }
             }, 2000);
         }
+    }
+
+    winGame() {
+        this.state = GameState.GAME_OVER;
+        if (this.ui.gameOverTitle) {
+            this.ui.gameOverTitle.textContent = 'YOU WIN';
+        }
+
+        this.ui.finalScore.textContent = this.score;
+        this.ui.finalLength.textContent = this.snake.length;
+        this.ui.finalTime.textContent = this.formatTime(this.survivalTime);
+
+        this.ui.hud.classList.add('hidden');
+        this.ui.gameOver.classList.remove('hidden');
+        document.body.classList.remove('spectator-mode');
+        this.applyOverlayUX({ forceChatMinimized: true });
+        this.updatePromoVisibility();
+        this.clearDirectionIndicator();
+
+        this.audioManager.stopBGM();
+        this.audioManager.playSound('collect');
+        this.audioManager.playMenuMusic();
+
+        this.submitScore();
     }
 
     async submitScore() {
@@ -956,6 +1223,9 @@ class SnakeArcade {
         this.ui.hud.classList.add('hidden');
         this.ui.menu.classList.remove('hidden');
         document.body.classList.remove('spectator-mode');
+        this.applyOverlayUX({ forceChatMinimized: true });
+        this.updatePromoVisibility();
+        this.clearDirectionIndicator();
         this.audioManager.stopBGM();
         this.audioManager.playMenuMusic(); // Play menu music
     }
@@ -963,11 +1233,14 @@ class SnakeArcade {
     toggleCameraMode() {
         this.cameraController.toggleMode();
     }
-
     toggleSound() {
         const btn = document.getElementById('sound-btn');
         const muted = this.audioManager.toggleMute();
-        btn.textContent = muted ? '🔇' : '🔊';
+        if (btn) {
+            btn.classList.toggle('is-muted', muted);
+            btn.title = muted ? 'Sound Off' : 'Sound On';
+            btn.setAttribute('aria-label', muted ? 'Sound muted' : 'Sound on');
+        }
     }
 
     update(deltaTime, elapsedTime) {
@@ -975,35 +1248,89 @@ class SnakeArcade {
 
         this.survivalTime += deltaTime;
 
-        // Update bomb timer
-        this.bombSpawnTimer += deltaTime;
-
-        // Spawn bomb periodically
-        if (this.bombSpawnTimer >= this.bombSpawnInterval && !this.bomb.isActive()) {
-            this.bomb.spawn(this.snake.getOccupiedCells(), this.food.getPosition());
-            this.bombSpawnTimer = 0;
+        // Safety net: never allow a fruit-less board during active play.
+        if (!this.food.hasFood()) {
+            const head = this.snake.getHeadPosition();
+            const recovered = this.food.spawnNear(this.snake.getOccupiedCells(), head, 1);
+            if (!recovered) {
+                this.winGame();
+                return;
+            }
         }
 
-        // Update bomb and check explosion
-        if (this.bomb.isActive()) {
-            const exploded = this.bomb.update(deltaTime);
+        if (this.aiEnabled) {
+            const forcedBombsActive = this.forcedBombMode;
 
-            // Check if snake head is in blast radius when bomb explodes
-            if (exploded) {
-                // Play explosion sound
-                this.audioManager.playSound('explosion');
+            // In autopilot mode, disable random hazards unless player explicitly spawned bombs.
+            if (!forcedBombsActive) {
+                if (this.bomb.isActive()) this.bomb.deactivate();
+                this.ai.setBombDangerZones([]);
+            } else {
+                if (!this.bomb.isActive() && this.manualBombQueue > 0) {
+                    this.bomb.spawn(this.snake.getOccupiedCells(), this.food.getPositions());
+                    this.manualBombQueue--;
+                }
 
-                const headPos = this.snake.getHeadPosition();
-                if (this.bomb.checkCollision(headPos)) {
-                    this.gameOver();
-                    return;
+                if (this.bomb.isActive()) {
+                    const exploded = this.bomb.update(deltaTime);
+                    if (exploded) {
+                        this.audioManager.playSound('explosion');
+                        const headPos = this.snake.getHeadPosition();
+                        if (this.bomb.checkCollision(headPos)) {
+                            this.gameOver();
+                            return;
+                        }
+                    }
+                    this.ai.setBombDangerZones(this.bomb.getDangerZone());
+                } else {
+                    this.ai.setBombDangerZones([]);
+                }
+
+                if (this.manualBombQueue <= 0 && !this.bomb.isActive()) {
+                    this.forcedBombMode = false;
                 }
             }
-
-            // Tell AI about bomb danger zones
-            this.ai.setBombDangerZones(this.bomb.getDangerZone());
         } else {
-            this.ai.setBombDangerZones([]);
+            // Update bomb timer
+            this.bombSpawnTimer += deltaTime;
+
+            // Spawn bomb periodically
+            if (this.bombSpawnTimer >= this.bombSpawnInterval && !this.bomb.isActive()) {
+                this.bomb.spawn(this.snake.getOccupiedCells(), this.food.getPositions());
+                this.bombSpawnTimer = 0;
+            }
+
+            // Update bomb and check explosion
+            if (this.bomb.isActive()) {
+                const exploded = this.bomb.update(deltaTime);
+
+                // Check if snake head is in blast radius when bomb explodes
+                if (exploded) {
+                    // Play explosion sound
+                    this.audioManager.playSound('explosion');
+
+                    const headPos = this.snake.getHeadPosition();
+                    if (this.bomb.checkCollision(headPos)) {
+                        this.gameOver();
+                        return;
+                    }
+                }
+
+                // Tell AI about bomb danger zones
+                this.ai.setBombDangerZones(this.bomb.getDangerZone());
+            } else {
+                this.ai.setBombDangerZones([]);
+            }
+
+            // Hidden hotkey bomb wave: spawn queued bombs one-by-one as each bomb expires.
+            if (!this.bomb.isActive() && this.manualBombQueue > 0) {
+                this.bomb.spawn(this.snake.getOccupiedCells(), this.food.getPositions());
+                this.manualBombQueue--;
+            }
+
+            if (this.manualBombQueue <= 0 && !this.bomb.isActive()) {
+                this.forcedBombMode = false;
+            }
         }
 
         // Check if it's time to move
@@ -1027,12 +1354,29 @@ class SnakeArcade {
             // Get direction - manual or AI
             let direction;
             if (this.aiEnabled) {
+                const headPos = this.snake.getHeadPosition();
+                const aiFoodTargets = this.food.getPositions();
+
+                 // Anti-stuck recovery: if no reachable food for too long, respawn a single reachable food.
+                if (!this.ai.hasReachableFood(headPos, this.snake.getOccupiedCells(), aiFoodTargets)) {
+                    this.aiNoFoodPathTicks++;
+                    if (this.aiNoFoodPathTicks > CONFIG.aiNoPathAssistThreshold) {
+                        const recovered = this.food.spawnNear(this.snake.getOccupiedCells(), headPos, 1);
+                        if (!recovered) {
+                            this.forceFruitBatch(1);
+                        }
+                        this.aiNoFoodPathTicks = 0;
+                    }
+                } else {
+                    this.aiNoFoodPathTicks = 0;
+                }
+
                 // AI autopilot (cheat mode)
                 direction = this.ai.getNextDirection(
-                    this.snake.getHeadPosition(),
+                    headPos,
                     this.snake.getDirection(),
                     this.snake.getOccupiedCells(),
-                    this.food.getPosition(),
+                    aiFoodTargets,
                     this.powerUpManager.getActivePowerUps()
                 );
             } else if (this.manualDirection) {
@@ -1043,8 +1387,23 @@ class SnakeArcade {
                 direction = this.snake.getDirection();
             }
 
+            this.setDirectionIndicator(direction);
+
             // Move snake
-            const moveResult = this.snake.move(direction);
+            let moveResult = this.snake.move(direction);
+
+            if (moveResult.collision && this.aiEnabled) {
+                const emergency = this.ai.getEmergencyDirection(
+                    this.snake.getHeadPosition(),
+                    this.snake.getDirection(),
+                    this.snake.getOccupiedCells(),
+                    this.food.getPositions()
+                );
+                if (emergency) {
+                    moveResult = this.snake.move(emergency);
+                }
+            }
+            this.setDirectionIndicator(this.snake.getDirection());
 
             // Check collision
             if (moveResult.collision) {
@@ -1054,19 +1413,47 @@ class SnakeArcade {
                 }
             }
 
+            if (this.snake.length >= this.getPlayableCellCount()) {
+                this.winGame();
+                return;
+            }
+
             // Check food collection
             const headPos = this.snake.getHeadPosition();
+
+            // Direct contact with active bomb is instant death in manual play.
+            if (!this.aiEnabled && this.bomb.isActive() && this.bomb.checkDirectHit(headPos)) {
+                this.gameOver();
+                return;
+            }
+
+            let foodCollectedThisTick = false;
             if (this.food.checkCollision(headPos)) {
+                foodCollectedThisTick = true;
                 this.snake.grow();
                 this.addScore(CONFIG.pointsPerFood); // 100 points per food
                 this.particles.createCollectionEffect(headPos);
                 this.audioManager.playSound('collect');
 
-                // Spawn new food
-                this.food.spawn(this.snake.getOccupiedCells());
+                // Only spawn a new batch after the current one is fully consumed.
+                if (!this.food.hasFood()) {
+                    const spawned = this.food.spawn(this.snake.getOccupiedCells());
+                    if (!spawned) {
+                        this.winGame();
+                        return;
+                    }
+                }
 
                 // Speed up slightly
                 this.moveInterval = Math.max(CONFIG.minSpeed, this.moveInterval - CONFIG.speedIncrement);
+            }
+
+            if (this.aiEnabled) {
+                this.aiStepsWithoutFood = foodCollectedThisTick ? 0 : this.aiStepsWithoutFood + 1;
+                if (this.aiStepsWithoutFood >= CONFIG.aiStallGrowthInterval && !this.food.hasFood()) {
+                    this.food.spawnNear(this.snake.getOccupiedCells(), headPos, 1);
+                    this.aiStepsWithoutFood = 0;
+                }
             }
 
             // Check power-up collection
@@ -1085,17 +1472,22 @@ class SnakeArcade {
         this.cameraController.update(deltaTime, this.snake.getHeadPosition());
         this.audioManager.updateIntensity(this.score);
 
-        this.updateHUD();
+        this.hudRefreshTimer += deltaTime;
+        if (this.hudRefreshTimer >= CONFIG.hudUpdateInterval) {
+            this.updateHUD();
+            this.hudRefreshTimer = 0;
+        }
     }
 
-    addScore(points) {
+    addScore(points, options = {}) {
+        const { triggerComboEffects = true } = options;
         const multiplier = this.scoreManager.getMultiplier();
         this.score += Math.floor(points * multiplier);
         this.scoreManager.addCombo();
 
         // Visual feedback for point gain
         const comboData = this.scoreManager.getComboData();
-        if (comboData) {
+        if (comboData && triggerComboEffects) {
             this.ui.comboHud.classList.remove('hidden');
             this.ui.comboHud.classList.remove('combo-pop');
             void this.ui.comboHud.offsetWidth; // Trigger reflow
@@ -1103,12 +1495,19 @@ class SnakeArcade {
 
             // Play combo sound every time food is eaten
             this.audioManager.playComboSound(comboData.label);
+
+            // Combo-based fruit bursts (requested custom behavior).
+            const burstCount = this.getComboBurstFruitCount(comboData.label);
+            if (burstCount > 0 && this.lastComboBurstLabel !== comboData.label) {
+                this.forceFruitBatch(burstCount);
+                this.lastComboBurstLabel = comboData.label;
+            }
         }
     }
 
     activatePowerUp(type) {
         this.powerUpManager.activate(type);
-        this.addScore(25);
+        this.addScore(25, { triggerComboEffects: false });
         this.audioManager.playSound('powerup');
 
         // Apply effects based on type
@@ -1170,6 +1569,7 @@ class SnakeArcade {
             this.ui.comboHud.classList.remove('combo-glow');
             // Reset combo level tracking when combo breaks
             this.audioManager.resetComboLevel();
+            this.lastComboBurstLabel = null;
         }
     }
 
@@ -1190,36 +1590,27 @@ class SnakeArcade {
             container.appendChild(item);
         });
     }
-
     getPowerUpIcon(type) {
         const icons = {
-            timeSlow: '⏱️',
-            phase: '👻',
-            magnet: '🧲',
-            turbo: '⚡'
+            timeSlow: '\u23F1',
+            phase: '\u25C6',
+            magnet: '\u25C9',
+            turbo: '\u26A1'
         };
-        return icons[type] || '✨';
+        return icons[type] || '\u2736';
     }
 
     updateAIModeDisplay() {
-        const aiIndicator = document.getElementById('ai-mode-indicator');
-        if (aiIndicator) {
-            if (this.aiEnabled) {
-                aiIndicator.classList.remove('hidden');
-                aiIndicator.style.display = 'block';
-            } else {
-                aiIndicator.classList.add('hidden');
-                aiIndicator.style.display = 'none';
-            }
-        }
-
         if (!this.ui.aiMode) return;
         const modeNames = {
+            easy: 'EASY AI',
+            normal: 'NORMAL AI',
+            hard: 'HARD AI',
             beginner: 'BEGINNER AI',
             pro: 'PRO AI',
             godmode: 'GOD MODE AI'
         };
-        this.ui.aiMode.textContent = modeNames[this.difficulty];
+        this.ui.aiMode.textContent = modeNames[this.difficulty] || 'AI';
     }
 
     formatTime(seconds) {
@@ -1228,12 +1619,61 @@ class SnakeArcade {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 
+    getPlayableCellCount() {
+        return this.gridBounds.cellCount;
+    }
+
+    getTopDownCameraHeight(isMobile = window.innerWidth <= 768) {
+        return isMobile ? 23.6 : 24.4;
+    }
+
+    applyCameraFraming(isMobile = window.innerWidth <= 768) {
+        const cameraHeight = this.getTopDownCameraHeight(isMobile);
+
+        if (this.cameraController) {
+            this.cameraController.height = cameraHeight;
+        }
+
+        if (!this.cameraController || this.cameraController.mode === 'topdown') {
+            this.camera.position.set(0, cameraHeight, 0.1);
+            this.camera.lookAt(0, 0, 0);
+        }
+    }
+
+    getTargetPixelRatio(isMobile = window.innerWidth <= 768) {
+        const cap = isMobile ? 1.15 : 1.5;
+        return Math.min(window.devicePixelRatio || 1, cap);
+    }
+
+    getMobileControlsHeight() {
+        const controls = document.getElementById('mobile-controls');
+        if (!controls) return 122;
+
+        const rect = controls.getBoundingClientRect();
+        if (!rect || rect.height <= 0) return 122;
+        return Math.max(96, Math.round(rect.height));
+    }
+
+    getViewportLayout(isMobile = window.innerWidth <= 768) {
+        if (!isMobile) {
+            return {
+                hudHeight: 82,
+                controlsHeight: 0,
+                padding: 4
+            };
+        }
+
+        return {
+            hudHeight: 66,
+            controlsHeight: Math.max(104, this.getMobileControlsHeight() - 2),
+            padding: 0
+        };
+    }
+
     onResize() {
         // Recalculate game size maintaining 1:1 aspect ratio
         const isMobile = window.innerWidth <= 768;
-        const hudHeight = 50;
-        const controlsHeight = isMobile ? 140 : 0;
-        const padding = 10;
+        const { hudHeight, controlsHeight, padding } = this.getViewportLayout(isMobile);
 
         const availableWidth = window.innerWidth - (padding * 2);
         const availableHeight = window.innerHeight - hudHeight - controlsHeight - (padding * 2);
@@ -1244,9 +1684,13 @@ class SnakeArcade {
         // Keep fixed 1:1 aspect
         this.camera.aspect = 1;
         this.camera.updateProjectionMatrix();
+        this.applyCameraFraming(isMobile);
 
         this.renderer.setSize(gameSize, gameSize);
+        this.renderer.setPixelRatio(this.getTargetPixelRatio(isMobile));
         this.composer.setSize(gameSize, gameSize);
+        this.applyOverlayUX();
+        this.updatePromoVisibility();
     }
 
     animate() {
@@ -1273,3 +1717,4 @@ class SnakeArcade {
 window.addEventListener('DOMContentLoaded', () => {
     new SnakeArcade();
 });
+

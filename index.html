@@ -7,8 +7,7 @@
     <title>SNAKE ARCADE</title>
     <meta name="description" content="Next-gen 3D Snake Arcade with cinematic visuals">
     <link rel="stylesheet" href="styles.css">
-    <link rel="icon"
-        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐍</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%90%8D%3C/text%3E%3C/svg%3E">
     <link
         href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap"
         rel="stylesheet">
@@ -36,7 +35,7 @@
     <!-- Auth Screen -->
     <div id="auth-screen" class="hidden">
         <div class="auth-container">
-            <h1 class="auth-title">🐍 SNAKE ARCADE</h1>
+            <h1 class="auth-title">SNAKE ARCADE</h1>
 
             <!-- Login Form -->
             <div id="login-form" class="auth-form">
@@ -133,8 +132,6 @@
     <div id="game-hud" class="hidden">
         <!-- Top Stats Bar -->
         <div class="hud-stats-bar">
-            <!-- AI Mode Indicator -->
-            <div id="ai-mode-indicator" class="ai-mode-indicator hidden">AI AUTO: ON</div>
             <div class="stat-box">
                 <span class="stat-box-label">LENGTH</span>
                 <span id="length-value" class="stat-box-value">3</span>
@@ -148,12 +145,18 @@
                 <span id="score-value" class="stat-box-value score-highlight">0</span>
             </div>
             <div class="stat-box highscore-box">
-                <span class="stat-box-label">HIGHEST</span>
+                <span class="stat-box-label">HIGHSCORE</span>
                 <span id="highscore-value" class="stat-box-value highscore-highlight">0</span>
             </div>
         </div>
 
+        <div class="hud-right">
+            <div id="powerup-container" class="powerup-container"></div>
+        </div>
+
     </div>
+
+    <div id="hud-header-right" class="hud-header-right"></div>
 
     <!-- Combo HUD -->
     <div id="combo-hud" class="combo-hud hidden">
@@ -162,11 +165,6 @@
         <div class="combo-timer-container">
             <div id="combo-timer-bar" class="combo-timer-bar"></div>
         </div>
-    </div>
-
-    <div class="hud-right">
-        <div id="powerup-container" class="powerup-container"></div>
-    </div>
     </div>
 
     <!-- Premium Mobile Control Dock -->
@@ -237,28 +235,28 @@
             <h3 class="modal-title">CHOOSE SKIN</h3>
             <div class="skin-options">
                 <button class="skin-option selected" data-skin="blue" style="background: #4169E1;">
-                    <span class="skin-icon">🔵</span>
+                    <span class="skin-icon">&#9679;</span>
                     <span class="skin-name">SOLID</span>
                 </button>
                 <button class="skin-option" data-skin="green" style="background: #32CD32;">
-                    <span class="skin-icon">⚪</span>
+                    <span class="skin-icon">&#9675;</span>
                     <span class="skin-name">CIRCLE</span>
                 </button>
                 <button class="skin-option" data-skin="red" style="background: #DC143C;">
-                    <span class="skin-icon">❤️</span>
+                    <span class="skin-icon">&#10084;</span>
                     <span class="skin-name">HEART</span>
                 </button>
                 <button class="skin-option" data-skin="gold" style="background: #FFD700;">
-                    <span class="skin-icon">⭐</span>
+                    <span class="skin-icon">&#9733;</span>
                     <span class="skin-name">STAR</span>
                 </button>
                 <button class="skin-option" data-skin="purple" style="background: #9932CC;">
-                    <span class="skin-icon">💎</span>
+                    <span class="skin-icon">&#9671;</span>
                     <span class="skin-name">DIAMOND</span>
                 </button>
                 <button class="skin-option" data-skin="diamond"
                     style="background: linear-gradient(135deg, #00ffff, #ff00ff);">
-                    <span class="skin-icon">✨</span>
+                    <span class="skin-icon">&#10022;</span>
                     <span class="skin-name">PRISMA</span>
                 </button>
             </div>
@@ -286,7 +284,7 @@
             </div>
             <div class="game-over-buttons">
                 <button id="restart-btn" class="neon-btn primary">RESTART</button>
-                <button id="leaderboard-btn" class="neon-btn">🏆 LEADERBOARD</button>
+                <button id="leaderboard-btn" class="neon-btn">LEADERBOARD</button>
                 <button id="menu-btn" class="neon-btn secondary">MENU</button>
             </div>
         </div>
@@ -304,7 +302,7 @@
     <!-- Leaderboard Modal -->
     <div id="leaderboard-modal" class="modal hidden">
         <div class="modal-content leaderboard-modal">
-            <h3 class="modal-title">🏆 LEADERBOARD</h3>
+            <h3 class="modal-title">LEADERBOARD</h3>
             <div class="leaderboard-tabs">
                 <button class="tab-btn active" data-tab="easy">EASY</button>
                 <button class="tab-btn" data-tab="normal">NORMAL</button>
@@ -330,8 +328,8 @@
         <!-- Live Leaderboard Panel -->
         <div id="live-leaderboard" class="live-leaderboard">
             <div class="lb-header">
-                <h4 class="lb-title">🏆 TOP 25</h4>
-                <button id="lb-minimize" class="lb-minimize">▼</button>
+                <h4 class="lb-title">TOP 25</h4>
+                <button id="lb-minimize" class="lb-minimize">&#9660;</button>
             </div>
             <div class="lb-tabs">
                 <button class="lb-tab active" data-diff="easy">EASY</button>
@@ -357,19 +355,17 @@
     <!-- Chat Panel -->
     <div id="chat-panel" class="chat-panel hidden">
         <div class="chat-header">
-            <span class="chat-title">🐍 CHAT</span>
-            <span id="online-count" class="online-count">🟢 0 online</span>
-            <button id="chat-close" class="chat-close">×</button>
+            <span class="chat-title">CHAT</span>
+            <span id="online-count" class="online-count">0 online</span>
+            <button id="chat-close" class="chat-close">&times;</button>
         </div>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input-wrapper">
             <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." maxlength="200">
-            <button id="chat-send" class="chat-send">➤</button>
+            <button id="chat-send" class="chat-send">&#10148;</button>
         </div>
     </div>
 
-    <!-- Chat Toggle Button -->
-    <button id="chat-toggle" class="chat-toggle">💬</button>
 
     <!-- Main Game Script -->
     <script type="module" src="js/main.js"></script>

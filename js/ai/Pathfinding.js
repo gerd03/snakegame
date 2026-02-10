@@ -1,16 +1,20 @@
 /**
- * Pathfinding - A* and BFS Implementation
+ * Pathfinding - A* and BFS on GridBounds.
  */
 
+import { GridBounds } from '../core/GridBounds.js';
+
 export class Pathfinding {
-    constructor(gridSize) {
-        this.gridSize = gridSize;
-        this.halfGrid = Math.floor(gridSize / 2);
+    constructor(gridConfig) {
+        this.grid = GridBounds.from(gridConfig);
     }
 
-    // A* Pathfinding
     findPath(start, end, obstacles) {
+        if (start.x === end.x && start.z === end.z) return [];
+
         const openSet = [start];
+        const openSetKeys = new Set([this.key(start)]);
+        const closedSet = new Set();
         const cameFrom = new Map();
 
         const gScore = new Map();
@@ -19,74 +23,57 @@ export class Pathfinding {
         const fScore = new Map();
         fScore.set(this.key(start), this.heuristic(start, end));
 
-        const obstacleSet = new Set(obstacles.map(o => this.key(o)));
-        // Remove tail from obstacles (it will move when we move)
-        if (obstacles.length > 0) {
-            obstacleSet.delete(this.key(obstacles[obstacles.length - 1]));
-        }
+        const obstacleSet = new Set((obstacles || []).map(o => this.key(o)));
 
         while (openSet.length > 0) {
-            // Get node with lowest fScore
-            openSet.sort((a, b) =>
-                (fScore.get(this.key(a)) || Infinity) - (fScore.get(this.key(b)) || Infinity)
-            );
-            const current = openSet.shift();
+            let bestIndex = 0;
+            let current = openSet[0];
+            let currentKey = this.key(current);
+            let bestScore = fScore.get(currentKey) ?? Infinity;
 
-            // Reached goal
+            for (let i = 1; i < openSet.length; i++) {
+                const node = openSet[i];
+                const nodeKey = this.key(node);
+                const nodeScore = fScore.get(nodeKey) ?? Infinity;
+                if (nodeScore < bestScore) {
+                    bestIndex = i;
+                    current = node;
+                    currentKey = nodeKey;
+                    bestScore = nodeScore;
+                }
+            }
+
+            const tail = openSet.pop();
+            if (bestIndex < openSet.length) {
+                openSet[bestIndex] = tail;
+            }
+
+            openSetKeys.delete(currentKey);
+            if (closedSet.has(currentKey)) continue;
+            closedSet.add(currentKey);
+
             if (current.x === end.x && current.z === end.z) {
                 return this.reconstructPath(cameFrom, current);
             }
 
-            // Check neighbors
             const neighbors = this.getNeighbors(current);
             for (const neighbor of neighbors) {
                 const neighborKey = this.key(neighbor);
 
-                // Skip if obstacle or out of bounds
-                if (obstacleSet.has(neighborKey) || !this.inBounds(neighbor)) {
+                if (obstacleSet.has(neighborKey) || !this.inBounds(neighbor) || closedSet.has(neighborKey)) {
                     continue;
                 }
 
-                const tentativeG = (gScore.get(this.key(current)) || Infinity) + 1;
-
-                if (tentativeG < (gScore.get(neighborKey) || Infinity)) {
+                const tentativeG = (gScore.get(currentKey) ?? Infinity) + 1;
+                if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
                     cameFrom.set(neighborKey, current);
                     gScore.set(neighborKey, tentativeG);
                     fScore.set(neighborKey, tentativeG + this.heuristic(neighbor, end));
 
-                    if (!openSet.some(n => n.x === neighbor.x && n.z === neighbor.z)) {
+                    if (!openSetKeys.has(neighborKey)) {
                         openSet.push(neighbor);
+                        openSetKeys.add(neighborKey);
                     }
-                }
-            }
-        }
-
-        return null; // No path found
-    }
-
-    // BFS for finding any reachable cell
-    bfs(start, target, obstacles) {
-        const queue = [{ pos: start, path: [] }];
-        const visited = new Set([this.key(start)]);
-        const obstacleSet = new Set(obstacles.map(o => this.key(o)));
-
-        while (queue.length > 0) {
-            const { pos, path } = queue.shift();
-
-            if (pos.x === target.x && pos.z === target.z) {
-                return path;
-            }
-
-            const neighbors = this.getNeighbors(pos);
-            for (const neighbor of neighbors) {
-                const key = this.key(neighbor);
-
-                if (!visited.has(key) && !obstacleSet.has(key) && this.inBounds(neighbor)) {
-                    visited.add(key);
-                    queue.push({
-                        pos: neighbor,
-                        path: [...path, neighbor]
-                    });
                 }
             }
         }
@@ -94,27 +81,59 @@ export class Pathfinding {
         return null;
     }
 
-    // Flood fill to count accessible cells
+    bfs(start, target, obstacles) {
+        const queue = [{ pos: start, path: [] }];
+        let queueIndex = 0;
+        const visited = new Set([this.key(start)]);
+        const obstacleSet = new Set((obstacles || []).map(o => this.key(o)));
+
+        while (queueIndex < queue.length) {
+            const { pos, path } = queue[queueIndex++];
+
+            if (pos.x === target.x && pos.z === target.z) {
+                return path;
+            }
+
+            for (const neighbor of this.getNeighbors(pos)) {
+                const neighborKey = this.key(neighbor);
+                if (visited.has(neighborKey) || obstacleSet.has(neighborKey) || !this.inBounds(neighbor)) {
+                    continue;
+                }
+
+                visited.add(neighborKey);
+                queue.push({
+                    pos: neighbor,
+                    path: [...path, neighbor]
+                });
+            }
+        }
+
+        return null;
+    }
+
     floodFill(start, obstacles) {
         const visited = new Set();
-        const obstacleSet = new Set(obstacles.slice(0, -1).map(o => this.key(o))); // Exclude tail
+        const obstacleSet = new Set((obstacles || []).map(o => this.key(o)));
         const queue = [start];
+        let queueIndex = 0;
         let count = 0;
 
-        while (queue.length > 0 && count < 500) { // Limit for performance
-            const pos = queue.shift();
-            const key = this.key(pos);
+        const maxCells = this.grid.cellCount;
 
-            if (visited.has(key) || obstacleSet.has(key) || !this.inBounds(pos)) {
+        while (queueIndex < queue.length && count < maxCells) {
+            const pos = queue[queueIndex++];
+            const posKey = this.key(pos);
+
+            if (visited.has(posKey) || obstacleSet.has(posKey) || !this.inBounds(pos)) {
                 continue;
             }
 
-            visited.add(key);
+            visited.add(posKey);
             count++;
 
-            const neighbors = this.getNeighbors(pos);
-            for (const neighbor of neighbors) {
-                if (!visited.has(this.key(neighbor))) {
+            for (const neighbor of this.getNeighbors(pos)) {
+                const neighborKey = this.key(neighbor);
+                if (!visited.has(neighborKey)) {
                     queue.push(neighbor);
                 }
             }
@@ -137,9 +156,7 @@ export class Pathfinding {
     }
 
     inBounds(pos) {
-        const maxCoord = this.halfGrid - 1; // 9 for gridSize 20
-        return pos.x >= -maxCoord && pos.x <= maxCoord &&
-            pos.z >= -maxCoord && pos.z <= maxCoord;
+        return this.grid.inBounds(pos);
     }
 
     key(pos) {
@@ -156,6 +173,6 @@ export class Pathfinding {
             currentKey = this.key(prev);
         }
 
-        return path.slice(1); // Remove start position
+        return path.slice(1);
     }
 }

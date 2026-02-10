@@ -1,20 +1,20 @@
 /**
- * Arena - Google Snake Style Green Checkered Field
- * Fixed to match playable area exactly (19x19 grid, -9 to 9)
+ * Arena - checkered playfield aligned with GridBounds.
  */
 
 import * as THREE from 'three';
+import { GridBounds } from './core/GridBounds.js';
 
 export class Arena {
-    constructor(scene, gridSize, cellSize) {
+    constructor(scene, gridConfig) {
         this.scene = scene;
-        this.gridSize = gridSize;
-        this.cellSize = cellSize;
+        this.grid = GridBounds.from(gridConfig);
+        this.cellSize = this.grid.cellSize;
 
-        // Playable area is -9 to 9 = 19 cells
-        this.playableSize = (Math.floor(gridSize / 2) - 1) * 2 + 1; // 19
-        this.totalSize = this.playableSize * cellSize; // 19
-        this.halfSize = this.totalSize / 2; // 9.5
+        this.totalWidth = this.grid.width * this.cellSize;
+        this.totalDepth = this.grid.height * this.cellSize;
+        this.halfWidth = this.totalWidth / 2;
+        this.halfDepth = this.totalDepth / 2;
 
         this.floor = null;
         this.walls = [];
@@ -28,33 +28,28 @@ export class Arena {
     }
 
     createCheckeredFloor() {
-        // Create checkered pattern like Google Snake
-        const lightGreen = 0xAAD751;
-        const darkGreen = 0xA2D149;
-
-        // Canvas matches playable grid exactly
         const canvas = document.createElement('canvas');
-        const size = this.playableSize; // 19
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
+        canvas.width = this.grid.width;
+        canvas.height = this.grid.height;
 
-        // Draw checkered pattern
-        for (let x = 0; x < size; x++) {
-            for (let z = 0; z < size; z++) {
-                const isLight = (x + z) % 2 === 0;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            throw new Error('Failed to create arena canvas context');
+        }
+
+        for (let localX = 0; localX < this.grid.width; localX++) {
+            for (let localZ = 0; localZ < this.grid.height; localZ++) {
+                const isLight = (localX + localZ) % 2 === 0;
                 ctx.fillStyle = isLight ? '#AAD751' : '#A2D149';
-                ctx.fillRect(x, z, 1, 1);
+                ctx.fillRect(localX, localZ, 1, 1);
             }
         }
 
-        // Create texture from canvas
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
 
-        // Main floor - sized to playable area
-        const floorGeometry = new THREE.PlaneGeometry(this.totalSize, this.totalSize);
+        const floorGeometry = new THREE.PlaneGeometry(this.totalWidth, this.totalDepth);
         const floorMaterial = new THREE.MeshStandardMaterial({
             map: texture,
             roughness: 0.8,
@@ -69,38 +64,39 @@ export class Arena {
     }
 
     createBorder() {
-        // Dark green border around the field
-        const borderColor = 0x578A34;
-        const borderWidth = 0.6;
-        const borderHeight = 0.4;
+        const borderColor = 0x4F8F2E;
+        const borderWidth = 0.85;
+        const borderHeight = 0.5;
+        const innerFrameColor = 0x2E6F1F;
+        const innerInset = 0.18;
+        const innerThickness = 0.2;
+        const innerHeight = 0.04;
 
         const borderMaterial = new THREE.MeshStandardMaterial({
             color: borderColor,
             roughness: 0.6,
             metalness: 0.1
         });
+        const innerFrameMaterial = new THREE.MeshBasicMaterial({
+            color: innerFrameColor
+        });
 
-        // Create 4 border walls - flush with playable area
         const borderConfigs = [
-            // North border
             {
-                pos: [0, borderHeight / 2, -this.halfSize - borderWidth / 2],
-                size: [this.totalSize + borderWidth * 2, borderHeight, borderWidth]
+                pos: [0, borderHeight / 2, -this.halfDepth - borderWidth / 2],
+                size: [this.totalWidth + borderWidth * 2, borderHeight, borderWidth]
             },
-            // South border
             {
-                pos: [0, borderHeight / 2, this.halfSize + borderWidth / 2],
-                size: [this.totalSize + borderWidth * 2, borderHeight, borderWidth]
+                pos: [0, borderHeight / 2, this.halfDepth + borderWidth / 2],
+                size: [this.totalWidth + borderWidth * 2, borderHeight, borderWidth]
             },
-            // West border
             {
-                pos: [-this.halfSize - borderWidth / 2, borderHeight / 2, 0],
-                size: [borderWidth, borderHeight, this.totalSize + borderWidth * 2]
+                pos: [-this.halfWidth - borderWidth / 2, borderHeight / 2, 0],
+                size: [borderWidth, borderHeight, this.totalDepth + borderWidth * 2]
             },
-            // East border
             {
-                pos: [this.halfSize + borderWidth / 2, borderHeight / 2, 0],
-                size: [borderWidth, borderHeight, this.totalSize + borderWidth * 2]
+                pos: [this.halfWidth + borderWidth / 2, borderHeight / 2, 0],
+                size: [borderWidth, borderHeight, this.totalDepth + borderWidth * 2]
             }
         ];
 
@@ -113,18 +109,46 @@ export class Arena {
             this.walls.push(wall);
             this.scene.add(wall);
         });
+
+        // Thin inner frame keeps the classic green edge clearly visible in top-down view.
+        const innerFrame = [
+            {
+                pos: [0, innerHeight / 2, -this.halfDepth + innerInset],
+                size: [this.totalWidth - innerInset * 2, innerHeight, innerThickness]
+            },
+            {
+                pos: [0, innerHeight / 2, this.halfDepth - innerInset],
+                size: [this.totalWidth - innerInset * 2, innerHeight, innerThickness]
+            },
+            {
+                pos: [-this.halfWidth + innerInset, innerHeight / 2, 0],
+                size: [innerThickness, innerHeight, this.totalDepth - innerInset * 2]
+            },
+            {
+                pos: [this.halfWidth - innerInset, innerHeight / 2, 0],
+                size: [innerThickness, innerHeight, this.totalDepth - innerInset * 2]
+            }
+        ];
+
+        innerFrame.forEach(config => {
+            const geometry = new THREE.BoxGeometry(...config.size);
+            const frame = new THREE.Mesh(geometry, innerFrameMaterial);
+            frame.position.set(...config.pos);
+            this.scene.add(frame);
+        });
     }
 
-    update(time) {
-        // Static field - no animation needed
+    update(_time) {
+        // Static field.
     }
 
     getBounds() {
+        const worldBounds = this.grid.getBoundsWorld();
         return {
-            minX: -this.halfSize + this.cellSize / 2,
-            maxX: this.halfSize - this.cellSize / 2,
-            minZ: -this.halfSize + this.cellSize / 2,
-            maxZ: this.halfSize - this.cellSize / 2
+            minX: worldBounds.minX,
+            maxX: worldBounds.maxX,
+            minZ: worldBounds.minZ,
+            maxZ: worldBounds.maxZ
         };
     }
 }

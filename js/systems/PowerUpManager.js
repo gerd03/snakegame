@@ -1,42 +1,41 @@
-/**
- * PowerUpManager - Power-up Spawning and Management
+﻿/**
+ * PowerUpManager - spawning and active power-up tracking.
  */
 
 import * as THREE from 'three';
+import { GridBounds } from '../core/GridBounds.js';
 
 export class PowerUpManager {
-    constructor(scene, gridSize, cellSize) {
+    constructor(scene, gridConfig) {
         this.scene = scene;
-        this.gridSize = gridSize;
-        this.cellSize = cellSize;
-        this.halfSize = (gridSize * cellSize) / 2;
+        this.grid = GridBounds.from(gridConfig);
+        this.cellSize = this.grid.cellSize;
 
-        this.powerUps = []; // Spawned power-ups
-        this.activePowerUps = []; // Currently active effects
+        this.powerUps = [];
+        this.activePowerUps = [];
 
-        // Power-up definitions
         this.types = {
             timeSlow: {
                 color: 0x00ffff,
-                icon: '⏱️',
+                icon: 'time',
                 duration: 5,
                 spawnChance: 0.3
             },
             phase: {
                 color: 0xff00ff,
-                icon: '👻',
+                icon: 'phase',
                 duration: 3,
                 spawnChance: 0.2
             },
             magnet: {
                 color: 0xffff00,
-                icon: '🧲',
+                icon: 'magnet',
                 duration: 8,
                 spawnChance: 0.3
             },
             turbo: {
                 color: 0xff6600,
-                icon: '⚡',
+                icon: 'turbo',
                 duration: 4,
                 spawnChance: 0.2
             }
@@ -44,33 +43,16 @@ export class PowerUpManager {
     }
 
     spawnPowerUp(occupiedCells) {
-        // Random type
         const typeKeys = Object.keys(this.types);
         const type = typeKeys[Math.floor(Math.random() * typeKeys.length)];
         const typeData = this.types[type];
 
-        // Find valid position
-        const halfGrid = Math.floor(this.gridSize / 2);
-        let position;
-        let attempts = 0;
+        const occupiedSet = new Set(occupiedCells.map(c => `${c.x},${c.z}`));
+        const position = this.grid.randomFreeCell(occupiedSet);
+        if (!position) return;
 
-        do {
-            position = {
-                x: Math.floor(Math.random() * this.gridSize) - halfGrid,
-                z: Math.floor(Math.random() * this.gridSize) - halfGrid
-            };
-            attempts++;
-        } while (
-            occupiedCells.some(c => c.x === position.x && c.z === position.z) &&
-            attempts < 50
-        );
-
-        if (attempts >= 50) return;
-
-        // Create 3D object
         const group = new THREE.Group();
 
-        // Main orb
         const orbGeometry = new THREE.OctahedronGeometry(this.cellSize * 0.35, 0);
         const orbMaterial = new THREE.MeshStandardMaterial({
             color: typeData.color,
@@ -84,7 +66,6 @@ export class PowerUpManager {
         const orb = new THREE.Mesh(orbGeometry, orbMaterial);
         group.add(orb);
 
-        // Outer ring
         const ringGeometry = new THREE.TorusGeometry(this.cellSize * 0.5, 0.03, 8, 32);
         const ringMaterial = new THREE.MeshBasicMaterial({
             color: typeData.color,
@@ -95,11 +76,8 @@ export class PowerUpManager {
         ring.rotation.x = Math.PI / 2;
         group.add(ring);
 
-        group.position.set(
-            position.x * this.cellSize,
-            this.cellSize * 0.5,
-            position.z * this.cellSize
-        );
+        const world = this.grid.gridToWorld(position.x, position.z);
+        group.position.set(world.x, this.cellSize * 0.5, world.z);
 
         this.scene.add(group);
 
@@ -115,16 +93,16 @@ export class PowerUpManager {
 
     checkCollision(headPos) {
         for (let i = this.powerUps.length - 1; i >= 0; i--) {
-            const pu = this.powerUps[i];
+            const powerUp = this.powerUps[i];
 
-            if (Math.abs(headPos.gridX - pu.position.x) < 1 &&
-                Math.abs(headPos.gridZ - pu.position.z) < 1) {
-                // Collected
-                this.scene.remove(pu.mesh);
+            if (Math.abs(headPos.gridX - powerUp.position.x) < 1 &&
+                Math.abs(headPos.gridZ - powerUp.position.z) < 1) {
+                this.scene.remove(powerUp.mesh);
                 this.powerUps.splice(i, 1);
-                return pu.type;
+                return powerUp.type;
             }
         }
+
         return null;
     }
 
@@ -132,10 +110,7 @@ export class PowerUpManager {
         const typeData = this.types[type];
         if (!typeData) return;
 
-        // Remove existing of same type
-        this.activePowerUps = this.activePowerUps.filter(p => p.type !== type);
-
-        // Add new active power-up
+        this.activePowerUps = this.activePowerUps.filter(powerUp => powerUp.type !== type);
         this.activePowerUps.push({
             type,
             remainingTime: typeData.duration,
@@ -145,47 +120,42 @@ export class PowerUpManager {
     }
 
     hasActivePowerUp(type) {
-        return this.activePowerUps.some(p => p.type === type);
+        return this.activePowerUps.some(powerUp => powerUp.type === type);
     }
 
     getActivePowerUps() {
-        return this.activePowerUps.map(p => ({
-            type: p.type,
-            remainingPercent: (p.remainingTime / p.totalDuration) * 100
+        return this.activePowerUps.map(powerUp => ({
+            type: powerUp.type,
+            remainingPercent: (powerUp.remainingTime / powerUp.totalDuration) * 100
         }));
     }
 
     update(deltaTime) {
-        // Update spawned power-ups (animation)
-        for (const pu of this.powerUps) {
-            pu.time += deltaTime;
+        for (const powerUp of this.powerUps) {
+            powerUp.time += deltaTime;
 
-            // Float and rotate
-            pu.mesh.position.y = this.cellSize * 0.5 + Math.sin(pu.time * 3) * 0.2;
-            pu.orb.rotation.y = pu.time * 2;
-            pu.orb.rotation.x = pu.time;
-            pu.ring.rotation.z = pu.time * 1.5;
+            powerUp.mesh.position.y = this.cellSize * 0.5 + Math.sin(powerUp.time * 3) * 0.2;
+            powerUp.orb.rotation.y = powerUp.time * 2;
+            powerUp.orb.rotation.x = powerUp.time;
+            powerUp.ring.rotation.z = powerUp.time * 1.5;
 
-            // Pulse glow
-            pu.orb.material.emissiveIntensity = 0.4 + Math.sin(pu.time * 4) * 0.2;
+            powerUp.orb.material.emissiveIntensity = 0.4 + Math.sin(powerUp.time * 4) * 0.2;
         }
 
-        // Update active power-ups
         for (let i = this.activePowerUps.length - 1; i >= 0; i--) {
-            const pu = this.activePowerUps[i];
-            pu.remainingTime -= deltaTime;
-            pu.remainingPercent = (pu.remainingTime / pu.totalDuration) * 100;
+            const powerUp = this.activePowerUps[i];
+            powerUp.remainingTime -= deltaTime;
+            powerUp.remainingPercent = (powerUp.remainingTime / powerUp.totalDuration) * 100;
 
-            if (pu.remainingTime <= 0) {
+            if (powerUp.remainingTime <= 0) {
                 this.activePowerUps.splice(i, 1);
             }
         }
     }
 
     reset() {
-        // Clear all spawned power-ups
-        for (const pu of this.powerUps) {
-            this.scene.remove(pu.mesh);
+        for (const powerUp of this.powerUps) {
+            this.scene.remove(powerUp.mesh);
         }
         this.powerUps = [];
         this.activePowerUps = [];

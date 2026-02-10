@@ -1,16 +1,15 @@
 /**
- * Snake - Google Snake Style with Smooth Connected Body
- * Slim, smooth tube-like body without bloating
+ * Snake - smooth connected body with GridBounds-based coordinates.
  */
 
 import * as THREE from 'three';
+import { GridBounds } from './core/GridBounds.js';
 
 export class Snake {
-    constructor(scene, gridSize, cellSize) {
+    constructor(scene, gridConfig) {
         this.scene = scene;
-        this.gridSize = gridSize;
-        this.cellSize = cellSize;
-        this.halfSize = (gridSize * cellSize) / 2;
+        this.grid = GridBounds.from(gridConfig);
+        this.cellSize = this.grid.cellSize;
 
         this.segments = [];
         this.meshes = [];
@@ -19,37 +18,204 @@ export class Snake {
         this.length = 3;
         this.growPending = 0;
 
-        // Visual settings - slim smooth body
-        this.bodyRadius = cellSize * 0.32;  // Slimmer
-        this.headRadius = cellSize * 0.38;
-
-        // Blue snake color
+        this.bodyRadius = this.cellSize * 0.32;
+        this.headRadius = this.cellSize * 0.38;
         this.snakeColor = 0x4285F4;
+        this.currentSkinColor = this.snakeColor;
+        this.currentPattern = 'none';
+        this.patternTextures = new Map();
+
+        this.upVector = new THREE.Vector3(0, 1, 0);
+        this.connectorDirection = new THREE.Vector3();
+        this.headMesh = null;
 
         this.createMaterials();
         this.reset();
     }
 
     createMaterials() {
-        // Body material - no shadows for performance
         this.bodyMaterial = new THREE.MeshStandardMaterial({
             color: this.snakeColor,
             roughness: 0.5,
             metalness: 0.0
         });
 
-        // Eye materials
-        this.eyeWhiteMaterial = new THREE.MeshBasicMaterial({
-            color: 0xFFFFFF
-        });
+        this.eyeWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+        this.pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
 
-        this.pupilMaterial = new THREE.MeshBasicMaterial({
-            color: 0x000000
-        });
+        this.connectorGeometry = new THREE.CylinderGeometry(
+            this.bodyRadius,
+            this.bodyRadius,
+            this.cellSize,
+            8
+        );
+
+        this.applySkinMaterial(this.currentSkinColor, this.currentPattern);
+    }
+
+    applySkinMaterial(color, pattern = 'none') {
+        const baseColor = new THREE.Color(color);
+
+        if (!pattern || pattern === 'none') {
+            this.bodyMaterial.map = null;
+            this.bodyMaterial.color.copy(baseColor);
+            this.bodyMaterial.emissive.setHex(0x000000);
+            this.bodyMaterial.needsUpdate = true;
+            return;
+        }
+
+        const texture = this.getPatternTexture(pattern, color);
+        if (!texture) {
+            this.bodyMaterial.map = null;
+            this.bodyMaterial.color.copy(baseColor);
+            this.bodyMaterial.needsUpdate = true;
+            return;
+        }
+
+        this.bodyMaterial.color.setHex(0xffffff);
+        this.bodyMaterial.map = texture;
+        this.bodyMaterial.emissive.setHex(0x000000);
+        this.bodyMaterial.needsUpdate = true;
+    }
+
+    getPatternTexture(pattern, color) {
+        const key = `${pattern}:${color}`;
+        if (this.patternTextures.has(key)) {
+            return this.patternTextures.get(key);
+        }
+
+        const texture = this.createPatternTexture(pattern, color);
+        if (!texture) return null;
+
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1.1, 1.1);
+        texture.offset.set(0.02, 0.02);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        this.patternTextures.set(key, texture);
+        return texture;
+    }
+
+    createPatternTexture(pattern, color) {
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        const base = new THREE.Color(color);
+        const baseHex = `#${base.getHexString()}`;
+        const bright = base.clone().lerp(new THREE.Color(0xffffff), 0.74);
+        const dark = base.clone().lerp(new THREE.Color(0x000000), 0.44);
+        const brightHex = `#${bright.getHexString()}`;
+        const darkHex = `#${dark.getHexString()}`;
+
+        const gradient = ctx.createLinearGradient(0, 0, size, size);
+        gradient.addColorStop(0, baseHex);
+        gradient.addColorStop(0.56, brightHex);
+        gradient.addColorStop(1, darkHex);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = '#ffffff';
+        for (let y = 0; y < size; y += 18) {
+            ctx.fillRect(0, y, size, 2);
+        }
+        ctx.globalAlpha = 1;
+
+        const drawHeart = (x, y, s, fill) => {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(s, s);
+            ctx.beginPath();
+            ctx.moveTo(0, 2);
+            ctx.bezierCurveTo(0, -3, -8, -3, -8, 3);
+            ctx.bezierCurveTo(-8, 8, -2, 11, 0, 14);
+            ctx.bezierCurveTo(2, 11, 8, 8, 8, 3);
+            ctx.bezierCurveTo(8, -3, 0, -3, 0, 2);
+            ctx.closePath();
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.restore();
+        };
+
+        const drawStar = (x, y, r, fill) => {
+            const inner = r * 0.44;
+            ctx.beginPath();
+            for (let i = 0; i < 10; i++) {
+                const angle = (Math.PI / 5) * i - Math.PI / 2;
+                const radius = i % 2 === 0 ? r : inner;
+                const px = x + Math.cos(angle) * radius;
+                const py = y + Math.sin(angle) * radius;
+                if (i === 0) ctx.moveTo(px, py);
+                else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.stroke();
+        };
+
+        const drawDiamond = (x, y, w, h, fill) => {
+            ctx.beginPath();
+            ctx.moveTo(x, y - h);
+            ctx.lineTo(x + w, y);
+            ctx.lineTo(x, y + h);
+            ctx.lineTo(x - w, y);
+            ctx.closePath();
+            ctx.fillStyle = fill;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.stroke();
+        };
+
+        const step = 112;
+        for (let y = step / 2; y < size; y += step) {
+            for (let x = step / 2; x < size; x += step) {
+                const offset = ((x + y) / step) % 2 === 0;
+                const px = offset ? x : x - 14;
+                const py = y;
+
+                switch (pattern) {
+                    case 'circle':
+                        ctx.beginPath();
+                        ctx.arc(px, py, 24, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                        ctx.fill();
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                        ctx.stroke();
+                        break;
+                    case 'heart':
+                        drawHeart(px, py - 10, 1.6, '#ffd0db');
+                        break;
+                    case 'star':
+                        drawStar(px, py, 24, '#ffe480');
+                        break;
+                    case 'diamond':
+                        drawDiamond(px, py, 22, 28, '#8cf2ff');
+                        break;
+                    case 'prisma':
+                        drawDiamond(px - 12, py + 4, 15, 22, '#9af9ff');
+                        drawStar(px + 16, py - 12, 12, '#ffd980');
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        return new THREE.CanvasTexture(canvas);
     }
 
     reset() {
-        // Clear meshes
         this.meshes.forEach(mesh => {
             this.scene.remove(mesh);
             if (mesh.children) {
@@ -61,19 +227,20 @@ export class Snake {
         });
         this.meshes = [];
 
-        this.connectors.forEach(conn => {
-            this.scene.remove(conn);
-            if (conn.geometry) conn.geometry.dispose();
+        this.connectors.forEach(connector => {
+            this.scene.remove(connector);
         });
         this.connectors = [];
 
         this.length = 3;
         this.direction = { x: 1, z: 0 };
         this.growPending = 0;
-
         this.segments = [];
+
+        const startX = Math.max(this.grid.minX + 2, -1);
+        const startZ = Math.max(this.grid.minZ + 1, 0);
         for (let i = 0; i < this.length; i++) {
-            this.segments.push({ x: -i, z: 0 });
+            this.segments.push({ x: startX - i, z: startZ });
         }
 
         this.createMeshes();
@@ -84,15 +251,13 @@ export class Snake {
             let mesh;
             if (index === 0) {
                 mesh = this.createHead();
+                this.headMesh = mesh;
             } else {
-                mesh = this.createBodySegment(index);
+                mesh = this.createBodySegment();
             }
 
-            mesh.position.set(
-                seg.x * this.cellSize,
-                this.cellSize * 0.35,
-                seg.z * this.cellSize
-            );
+            const world = this.grid.gridToWorld(seg.x, seg.z);
+            mesh.position.set(world.x, this.cellSize * 0.35, world.z);
 
             this.meshes.push(mesh);
             this.scene.add(mesh);
@@ -104,18 +269,15 @@ export class Snake {
     createHead() {
         const group = new THREE.Group();
 
-        // Smooth head sphere
-        const headGeometry = new THREE.SphereGeometry(this.headRadius, 24, 24);
+        const headGeometry = new THREE.SphereGeometry(this.headRadius, 20, 20);
         const head = new THREE.Mesh(headGeometry, this.bodyMaterial);
         group.add(head);
 
-        // Eyes
         const eyeSize = this.headRadius * 0.4;
         const eyeOffset = this.headRadius * 0.45;
         const eyeHeight = this.headRadius * 0.25;
         const eyeForward = this.headRadius * 0.7;
 
-        // Left eye
         const leftEyeWhite = new THREE.Mesh(
             new THREE.SphereGeometry(eyeSize, 12, 12),
             this.eyeWhiteMaterial
@@ -130,7 +292,6 @@ export class Snake {
         leftPupil.position.set(-eyeOffset, eyeHeight, eyeForward + eyeSize * 0.6);
         group.add(leftPupil);
 
-        // Right eye
         const rightEyeWhite = new THREE.Mesh(
             new THREE.SphereGeometry(eyeSize, 12, 12),
             this.eyeWhiteMaterial
@@ -148,70 +309,50 @@ export class Snake {
         return group;
     }
 
-    createBodySegment(index) {
-        // Simple sphere for body - connectors create the tube effect
-        const geometry = new THREE.SphereGeometry(this.bodyRadius, 16, 16);
+    createBodySegment() {
+        const geometry = new THREE.SphereGeometry(this.bodyRadius, 12, 12);
         return new THREE.Mesh(geometry, this.bodyMaterial);
     }
 
+    createConnector() {
+        return new THREE.Mesh(this.connectorGeometry, this.bodyMaterial);
+    }
+
     updateConnectors() {
-        // Remove old connectors
-        this.connectors.forEach(conn => {
-            this.scene.remove(conn);
-            if (conn.geometry) conn.geometry.dispose();
-        });
-        this.connectors = [];
+        const requiredConnectors = Math.max(0, this.segments.length - 1);
 
-        // Create smooth tube connectors
-        for (let i = 0; i < this.segments.length - 1; i++) {
-            const seg1 = this.segments[i];
-            const seg2 = this.segments[i + 1];
-
-            const pos1 = new THREE.Vector3(
-                seg1.x * this.cellSize,
-                this.cellSize * 0.35,
-                seg1.z * this.cellSize
-            );
-            const pos2 = new THREE.Vector3(
-                seg2.x * this.cellSize,
-                this.cellSize * 0.35,
-                seg2.z * this.cellSize
-            );
-
-            const connector = this.createConnector(pos1, pos2);
+        while (this.connectors.length < requiredConnectors) {
+            const connector = this.createConnector();
             this.connectors.push(connector);
             this.scene.add(connector);
         }
-    }
 
-    createConnector(pos1, pos2) {
-        const direction = new THREE.Vector3().subVectors(pos2, pos1);
-        const length = direction.length();
+        while (this.connectors.length > requiredConnectors) {
+            const connector = this.connectors.pop();
+            this.scene.remove(connector);
+        }
 
-        // Slim cylinder connector
-        const geometry = new THREE.CylinderGeometry(
-            this.bodyRadius,
-            this.bodyRadius,
-            length,
-            12
-        );
+        const y = this.cellSize * 0.35;
+        for (let i = 0; i < requiredConnectors; i++) {
+            const seg1 = this.segments[i];
+            const seg2 = this.segments[i + 1];
+            const p1 = this.grid.gridToWorld(seg1.x, seg1.z);
+            const p2 = this.grid.gridToWorld(seg2.x, seg2.z);
 
-        const connector = new THREE.Mesh(geometry, this.bodyMaterial);
-        connector.position.copy(pos1).add(pos2).multiplyScalar(0.5);
-        connector.quaternion.setFromUnitVectors(
-            new THREE.Vector3(0, 1, 0),
-            direction.clone().normalize()
-        );
+            const connector = this.connectors[i];
+            connector.position.set((p1.x + p2.x) * 0.5, y, (p1.z + p2.z) * 0.5);
 
-        return connector;
+            this.connectorDirection.set(p2.x - p1.x, 0, p2.z - p1.z);
+            this.connectorDirection.normalize();
+            connector.quaternion.setFromUnitVectors(this.upVector, this.connectorDirection);
+        }
     }
 
     move(newDirection) {
         if (newDirection) {
             const isOpposite =
-                newDirection.x === -this.direction.x && this.direction.x !== 0 ||
-                newDirection.z === -this.direction.z && this.direction.z !== 0;
-
+                (newDirection.x === -this.direction.x && this.direction.x !== 0) ||
+                (newDirection.z === -this.direction.z && this.direction.z !== 0);
             if (!isOpposite) {
                 this.direction = { ...newDirection };
             }
@@ -223,14 +364,15 @@ export class Snake {
             z: head.z + this.direction.z
         };
 
-        // Grid boundaries: -9 to 9 (19x19 playable area)
-        const maxCoord = Math.floor(this.gridSize / 2) - 1;  // 9
-        if (newHead.x < -maxCoord || newHead.x > maxCoord ||
-            newHead.z < -maxCoord || newHead.z > maxCoord) {
+        if (!this.grid.inBounds(newHead)) {
             return { collision: true, type: 'wall' };
         }
 
+        const willGrow = this.growPending > 0;
         for (let i = 1; i < this.segments.length; i++) {
+            const isTail = i === this.segments.length - 1;
+            if (isTail && !willGrow) continue;
+
             if (this.segments[i].x === newHead.x && this.segments[i].z === newHead.z) {
                 return { collision: true, type: 'self' };
             }
@@ -241,12 +383,11 @@ export class Snake {
         if (this.growPending > 0) {
             this.growPending--;
             this.length++;
-            const newMesh = this.createBodySegment(this.segments.length - 1);
-            newMesh.position.set(
-                this.segments[this.segments.length - 1].x * this.cellSize,
-                this.cellSize * 0.35,
-                this.segments[this.segments.length - 1].z * this.cellSize
-            );
+
+            const newMesh = this.createBodySegment();
+            const tail = this.segments[this.segments.length - 1];
+            const world = this.grid.gridToWorld(tail.x, tail.z);
+            newMesh.position.set(world.x, this.cellSize * 0.35, world.z);
             this.meshes.push(newMesh);
             this.scene.add(newMesh);
         } else {
@@ -260,15 +401,16 @@ export class Snake {
     }
 
     updateMeshPositions() {
-        this.segments.forEach((seg, i) => {
-            if (this.meshes[i]) {
-                this.meshes[i].position.x = seg.x * this.cellSize;
-                this.meshes[i].position.z = seg.z * this.cellSize;
+        this.segments.forEach((seg, index) => {
+            if (!this.meshes[index]) return;
 
-                if (i === 0) {
-                    const angle = Math.atan2(this.direction.x, this.direction.z);
-                    this.meshes[i].rotation.y = angle;
-                }
+            const world = this.grid.gridToWorld(seg.x, seg.z);
+            this.meshes[index].position.x = world.x;
+            this.meshes[index].position.z = world.z;
+
+            if (index === 0) {
+                const angle = Math.atan2(this.direction.x, this.direction.z);
+                this.meshes[index].rotation.y = angle;
             }
         });
     }
@@ -277,8 +419,8 @@ export class Snake {
         this.growPending += amount;
     }
 
-    update(deltaTime) {
-        // Minimal animation for performance
+    update(_deltaTime) {
+        // No per-frame motion interpolation.
     }
 
     getLength() {
@@ -287,11 +429,12 @@ export class Snake {
 
     getHeadPosition() {
         const head = this.segments[0];
+        const world = this.grid.gridToWorld(head.x, head.z);
         return {
             gridX: head.x,
             gridZ: head.z,
-            worldX: head.x * this.cellSize,
-            worldZ: head.z * this.cellSize
+            worldX: world.x,
+            worldZ: world.z
         };
     }
 
@@ -303,154 +446,38 @@ export class Snake {
         return this.segments.map(seg => ({ x: seg.x, z: seg.z }));
     }
 
-    setGlowColor(color) { }
+    setGlowColor(_color) {
+        // Reserved.
+    }
 
     setColor(color) {
-        // Update body material color
-        if (this.bodyMaterial) {
-            this.bodyMaterial.color.setHex(color);
-        }
-        // Update all body meshes (use 'meshes' not 'bodyMeshes')
+        this.currentSkinColor = color;
+        this.applySkinMaterial(color, this.currentPattern);
+
         if (this.meshes && this.meshes.length > 0) {
             this.meshes.forEach(mesh => {
                 if (mesh && mesh.material) {
-                    mesh.material.color.setHex(color);
-                }
-            });
-        }
-        // Update connectors
-        if (this.connectors && this.connectors.length > 0) {
-            this.connectors.forEach(conn => {
-                if (conn && conn.material) {
-                    conn.material.color.setHex(color);
-                }
-            });
-        }
-        // Update head
-        if (this.headMesh) {
-            if (this.headMesh.material) {
-                this.headMesh.material.color.setHex(color);
-            }
-        }
-    }
-
-    setSkin(color, pattern) {
-        // Store current skin settings
-        this.currentSkinColor = color;
-        this.currentPattern = pattern;
-
-        // First set the base color
-        this.setColor(color);
-
-        // If pattern is 'none', just use solid color
-        if (pattern === 'none') {
-            this.bodyMaterial.map = null;
-            this.bodyMaterial.needsUpdate = true;
-            return;
-        }
-
-        // Create patterned texture
-        const texture = this.createPatternTexture(color, pattern);
-
-        // Update the body material with texture (so new segments get it)
-        this.bodyMaterial.map = texture;
-        this.bodyMaterial.needsUpdate = true;
-
-        // Apply to ALL existing meshes including connectors
-        if (this.meshes && this.meshes.length > 0) {
-            this.meshes.forEach((mesh, i) => {
-                if (mesh && mesh.material) {
-                    mesh.material.map = texture;
                     mesh.material.needsUpdate = true;
                 }
             });
         }
 
-        // Apply to connectors
         if (this.connectors && this.connectors.length > 0) {
             this.connectors.forEach(conn => {
                 if (conn && conn.material) {
-                    conn.material.map = texture;
                     conn.material.needsUpdate = true;
                 }
             });
         }
+
+        if (this.headMesh && this.headMesh.material) {
+            this.headMesh.material.needsUpdate = true;
+        }
     }
 
-    createPatternTexture(baseColor, pattern) {
-        const size = 64;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-
-        // Convert hex color to CSS
-        const r = (baseColor >> 16) & 255;
-        const g = (baseColor >> 8) & 255;
-        const b = baseColor & 255;
-        const colorStr = `rgb(${r}, ${g}, ${b})`;
-        const lightColor = `rgb(${Math.min(255, r + 60)}, ${Math.min(255, g + 60)}, ${Math.min(255, b + 60)})`;
-
-        // Fill background
-        ctx.fillStyle = colorStr;
-        ctx.fillRect(0, 0, size, size);
-
-        // Draw pattern
-        ctx.fillStyle = lightColor;
-        ctx.strokeStyle = lightColor;
-        ctx.lineWidth = 2;
-
-        const cx = size / 2;
-        const cy = size / 2;
-        const patternSize = size * 0.35;
-
-        switch (pattern) {
-            case 'heart':
-                ctx.beginPath();
-                ctx.moveTo(cx, cy + patternSize * 0.3);
-                ctx.bezierCurveTo(cx - patternSize, cy - patternSize * 0.3, cx - patternSize, cy - patternSize, cx, cy - patternSize * 0.5);
-                ctx.bezierCurveTo(cx + patternSize, cy - patternSize, cx + patternSize, cy - patternSize * 0.3, cx, cy + patternSize * 0.3);
-                ctx.fill();
-                break;
-
-            case 'diamond':
-                ctx.beginPath();
-                ctx.moveTo(cx, cy - patternSize);
-                ctx.lineTo(cx + patternSize * 0.7, cy);
-                ctx.lineTo(cx, cy + patternSize);
-                ctx.lineTo(cx - patternSize * 0.7, cy);
-                ctx.closePath();
-                ctx.fill();
-                break;
-
-            case 'star':
-                const spikes = 5;
-                const outerRadius = patternSize;
-                const innerRadius = patternSize * 0.4;
-                ctx.beginPath();
-                for (let i = 0; i < spikes * 2; i++) {
-                    const radius = i % 2 === 0 ? outerRadius : innerRadius;
-                    const angle = (Math.PI / spikes) * i - Math.PI / 2;
-                    const x = cx + Math.cos(angle) * radius;
-                    const y = cy + Math.sin(angle) * radius;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                ctx.fill();
-                break;
-
-            case 'circle':
-                ctx.beginPath();
-                ctx.arc(cx, cy, patternSize * 0.6, 0, Math.PI * 2);
-                ctx.fill();
-                break;
-        }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
-        return texture;
+    setSkin(color, pattern) {
+        this.currentSkinColor = color;
+        this.currentPattern = pattern || 'none';
+        this.applySkinMaterial(this.currentSkinColor, this.currentPattern);
     }
 }

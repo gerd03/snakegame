@@ -8,10 +8,20 @@ export class ParticleSystem {
     constructor(scene) {
         this.scene = scene;
         this.particleSystems = [];
+        this.maxActiveSystems = 24;
+    }
+
+    ensureCapacity() {
+        if (this.particleSystems.length < this.maxActiveSystems) return;
+        const oldest = this.particleSystems.shift();
+        this.scene.remove(oldest.particles);
+        oldest.particles.geometry.dispose();
+        oldest.particles.material.dispose();
     }
 
     createCollectionEffect(position) {
-        const particleCount = 30;
+        this.ensureCapacity();
+        const particleCount = 18;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
         const velocities = [];
@@ -59,6 +69,7 @@ export class ParticleSystem {
     }
 
     createDeathExplosion(position) {
+        this.ensureCapacity();
         const particleCount = 100;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
@@ -113,6 +124,7 @@ export class ParticleSystem {
     }
 
     createPowerUpEffect(position, color = 0x00ffff) {
+        this.ensureCapacity();
         const particleCount = 50;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
@@ -160,6 +172,7 @@ export class ParticleSystem {
     }
 
     createTrailEffect(position) {
+        this.ensureCapacity();
         const particleCount = 5;
         const geometry = new THREE.BufferGeometry();
         const positions = new Float32Array(particleCount * 3);
