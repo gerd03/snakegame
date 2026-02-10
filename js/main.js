@@ -1146,8 +1146,6 @@ class SnakeArcade {
 
             this.applyOverlayUX({ forceChatMinimized: true });
 
-            // Start playing menu music
-            this.audioManager.playMenuMusic();
         }, 2500);
     }
 
@@ -1372,7 +1370,6 @@ class SnakeArcade {
         this.cameraController.shake(0.5);
         this.audioManager.playSound('death');
         this.audioManager.stopBGM();
-        this.audioManager.playMenuMusic(); // Play menu music on game over
 
         // Submit score to leaderboard
         this.submitScore();
@@ -1409,7 +1406,6 @@ class SnakeArcade {
 
         this.audioManager.stopBGM();
         this.audioManager.playSound('collect');
-        this.audioManager.playMenuMusic();
 
         this.submitScore();
     }
@@ -1456,7 +1452,6 @@ class SnakeArcade {
         this.clearDirectionIndicator();
         this.updateComboLayout();
         this.audioManager.stopBGM();
-        this.audioManager.playMenuMusic(); // Play menu music
     }
 
     toggleCameraMode() {

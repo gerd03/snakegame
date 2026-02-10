@@ -1,6 +1,6 @@
 /**
- * AudioManager - Custom MP3 Audio System
- * Uses user-provided MP3 files for all game sounds
+ * AudioManager - Audio System
+ * Uses local, project-owned MP3 files and synthetic Web Audio effects.
  */
 
 export class AudioManager {
@@ -38,14 +38,6 @@ export class AudioManager {
             console.log('[AUDIO] User interaction detected, initializing...');
             this.init();
             this.getWebAudioContext();
-
-            // Warm up tracks with a tiny slice of playback to unlock them
-            if (this.menuMusic) {
-                this.menuMusic.play().then(() => this.menuMusic.pause()).catch(() => { });
-            }
-            this.gameplayTracks.forEach(track => {
-                track.play().then(() => track.pause()).catch(() => { });
-            });
 
             window.removeEventListener('click', initAudio);
             window.removeEventListener('keydown', initAudio);
