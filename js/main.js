@@ -118,6 +118,8 @@ class SnakeArcade {
             comboMultiplier: document.getElementById('combo-multiplier'),
             comboTimer: document.getElementById('combo-timer-bar'),
             highscore: document.getElementById('highscore-value'),
+            profileBtn: document.getElementById('logout-profile-btn'),
+            profileInitial: document.getElementById('profile-initial'),
             aiMode: document.getElementById('ai-mode'),
             finalScore: document.getElementById('final-score'),
             finalLength: document.getElementById('final-length'),
@@ -395,6 +397,7 @@ class SnakeArcade {
         document.getElementById('restart-btn').addEventListener('click', () => this.restartGame());
         document.getElementById('menu-btn').addEventListener('click', () => this.showMenu());
         document.getElementById('leaderboard-btn')?.addEventListener('click', () => this.showLeaderboard());
+        document.getElementById('logout-profile-btn')?.addEventListener('click', () => this.logoutProfile());
         document.getElementById('menu-skins-btn')?.addEventListener('click', () => {
             document.getElementById('skin-modal')?.classList.remove('hidden');
         });
@@ -523,6 +526,8 @@ class SnakeArcade {
                 this.ui.auth.classList.add('hidden');
                 this.ui.menu.classList.remove('hidden');
                 this.state = GameState.MENU;
+                this.updatePromoVisibility();
+                this.updateProfileButton();
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -553,6 +558,8 @@ class SnakeArcade {
                 this.ui.auth.classList.add('hidden');
                 this.ui.menu.classList.remove('hidden');
                 this.state = GameState.MENU;
+                this.updatePromoVisibility();
+                this.updateProfileButton();
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -977,6 +984,7 @@ class SnakeArcade {
                 this.ui.auth.classList.remove('hidden');
             }
             this.updatePromoVisibility();
+            this.updateProfileButton();
 
             const chatPanel = document.getElementById('chat-panel');
             if (chatPanel) {
@@ -1002,6 +1010,52 @@ class SnakeArcade {
         const shouldShow = isDesktop && isMenuState && loadingDone && authHidden;
 
         promoPanel.classList.toggle('hidden', !shouldShow);
+    }
+
+    updateProfileButton() {
+        const profileBtn = this.ui.profileBtn;
+        if (!profileBtn) return;
+
+        const user = supabase.getUser();
+        const isVisible = !!user && this.ui.auth?.classList.contains('hidden');
+        profileBtn.classList.toggle('hidden', !isVisible);
+
+        if (!isVisible) return;
+
+        const name = (user.display_name || user.username || 'USER').trim();
+        if (this.ui.profileInitial) {
+            this.ui.profileInitial.textContent = name.charAt(0).toUpperCase();
+        }
+        profileBtn.title = `Log out (${name})`;
+        profileBtn.setAttribute('aria-label', `Log out ${name}`);
+    }
+
+    logoutProfile() {
+        supabase.logout();
+        this.aiEnabled = false;
+        this.cheatBuffer = '';
+        this.manualDirection = null;
+        this.clearDirectionIndicator();
+
+        document.body.classList.remove('spectator-mode');
+        this.ui.menu.classList.add('hidden');
+        this.ui.hud.classList.add('hidden');
+        this.ui.gameOver.classList.add('hidden');
+        this.ui.pause.classList.add('hidden');
+        this.ui.leaderboard?.classList.add('hidden');
+        this.ui.auth.classList.remove('hidden');
+        this.state = GameState.LOADING;
+
+        const chatPanel = document.getElementById('chat-panel');
+        if (chatPanel) {
+            chatPanel.classList.add('hidden');
+            chatPanel.classList.add('chat-minimized');
+        }
+
+        this.audioManager.stopBGM();
+        this.audioManager.stopMenuMusic();
+        this.updatePromoVisibility();
+        this.updateProfileButton();
     }
 
     getDirectionButtonKey(direction) {
@@ -1097,6 +1151,7 @@ class SnakeArcade {
         this.updateHUD();
         this.applyOverlayUX({ forceChatMinimized: true });
         this.updatePromoVisibility();
+        this.updateProfileButton();
         this.setDirectionIndicator(this.snake.getDirection());
 
         if (spectator) {
@@ -1141,6 +1196,7 @@ class SnakeArcade {
         document.body.classList.remove('spectator-mode');
         this.applyOverlayUX({ forceChatMinimized: true });
         this.updatePromoVisibility();
+        this.updateProfileButton();
         this.clearDirectionIndicator();
 
         // Effects
@@ -1179,6 +1235,7 @@ class SnakeArcade {
         document.body.classList.remove('spectator-mode');
         this.applyOverlayUX({ forceChatMinimized: true });
         this.updatePromoVisibility();
+        this.updateProfileButton();
         this.clearDirectionIndicator();
 
         this.audioManager.stopBGM();
@@ -1225,6 +1282,7 @@ class SnakeArcade {
         document.body.classList.remove('spectator-mode');
         this.applyOverlayUX({ forceChatMinimized: true });
         this.updatePromoVisibility();
+        this.updateProfileButton();
         this.clearDirectionIndicator();
         this.audioManager.stopBGM();
         this.audioManager.playMenuMusic(); // Play menu music

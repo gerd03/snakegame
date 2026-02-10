@@ -199,7 +199,7 @@ export class AIController {
 
     getEarlyGameFoodChaseMove(head, moves, snake, foods) {
         if (!foods || foods.length === 0) return null;
-        if (snake.length > 18) return null;
+        if (snake.length > 42) return null;
 
         const staticObstacles = snake.slice(0, -1);
         if (this.bombPositions.length > 0) {
@@ -224,15 +224,15 @@ export class AIController {
             if (!result) continue;
             if (!this.hasEscapeRoute(result.snake)) continue;
 
-            const pathBonus = Math.max(0, 14 - path.length) * 22;
-            const score = this.scoreSurvivalState(result.snake, foods) + 300 + pathBonus;
+            const pathBonus = Math.max(0, 20 - path.length) * 26;
+            const score = this.scoreSurvivalState(result.snake, foods) + 360 + pathBonus;
             if (!best || score > best.score) {
                 best = {
                     ...move,
                     score,
                     reason: `${target.x},${target.z}`,
                     survivalBuffer: this.getCycleTailBuffer(result.snake),
-                    foodGain: Math.max(1, 18 - path.length),
+                    foodGain: Math.max(1, 24 - path.length),
                     pathLength: path.length
                 };
             }
@@ -244,25 +244,25 @@ export class AIController {
     shouldPrioritizeShortcut(shortcutMove, cycleMove, snakeLength) {
         if (!shortcutMove) return false;
 
-        const minimumBuffer = Math.max(3, Math.floor(snakeLength * 0.05));
+        const minimumBuffer = Math.max(2, Math.floor(snakeLength * 0.03));
         if ((shortcutMove.survivalBuffer ?? 0) <= minimumBuffer) {
             return false;
         }
 
         if (!cycleMove) return true;
 
-        const shortPath = (shortcutMove.pathLength ?? 99) <= (snakeLength < 70 ? 8 : 6);
-        const cycleStall = (shortcutMove.foodGain ?? 0) >= 1;
-        const proactiveInterval = snakeLength < 60 ? 1 : (snakeLength < 140 ? 2 : 3);
+        const shortPath = (shortcutMove.pathLength ?? 99) <= (snakeLength < 120 ? 12 : 9);
+        const cycleStall = (shortcutMove.foodGain ?? 0) >= 0;
+        const proactiveInterval = snakeLength < 160 ? 1 : 2;
 
         if (shortPath || cycleStall) return true;
         return this.stepCounter % proactiveInterval === 0;
     }
 
     getShortcutTolerance(snakeLength) {
-        if (snakeLength < 60) return 18;
-        if (snakeLength < 140) return 12;
-        return 8;
+        if (snakeLength < 80) return 30;
+        if (snakeLength < 180) return 20;
+        return 12;
     }
 
     getBestShortcutMove(head, moves, snake, foods) {
@@ -270,7 +270,7 @@ export class AIController {
             return null;
         }
 
-        const interval = snake.length < 90 ? 1 : (snake.length < 180 ? 2 : 3);
+        const interval = snake.length < 220 ? 1 : 2;
         if (this.stepCounter % interval !== 0) {
             return null;
         }
@@ -295,8 +295,8 @@ export class AIController {
             }
 
             const dynamicPathLimit =
-                snake.length < 80 ? 34 :
-                    snake.length < 180 ? 28 : 22;
+                snake.length < 80 ? 44 :
+                    snake.length < 180 ? 36 : 26;
             if (path.length > dynamicPathLimit) {
                 continue;
             }
@@ -318,7 +318,7 @@ export class AIController {
                 ? this.cycle.distanceForward(headIndex, targetIndex)
                 : path.length;
             const foodGain = Math.max(0, cycleDistance - path.length);
-            const score = validation.score + foodGain * 34 + Math.max(0, 220 - path.length * 7);
+            const score = validation.score + foodGain * 48 + Math.max(0, 280 - path.length * 8);
             if (!best || score > best.score) {
                 best = {
                     ...move,

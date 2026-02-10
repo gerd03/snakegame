@@ -48,8 +48,15 @@ export class Arena {
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
+        texture.generateMipmaps = false;
+        texture.needsUpdate = true;
 
-        const floorGeometry = new THREE.PlaneGeometry(this.totalWidth, this.totalDepth);
+        // Slight inset avoids edge seams/green line artifacts at the border.
+        const floorInset = this.cellSize * 0.08;
+        const floorGeometry = new THREE.PlaneGeometry(
+            this.totalWidth - floorInset,
+            this.totalDepth - floorInset
+        );
         const floorMaterial = new THREE.MeshStandardMaterial({
             map: texture,
             roughness: 0.8,
@@ -58,7 +65,7 @@ export class Arena {
 
         this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
         this.floor.rotation.x = -Math.PI / 2;
-        this.floor.position.y = 0;
+        this.floor.position.y = -0.01;
         this.floor.receiveShadow = true;
         this.scene.add(this.floor);
     }
@@ -67,18 +74,11 @@ export class Arena {
         const borderColor = 0x4F8F2E;
         const borderWidth = 0.85;
         const borderHeight = 0.5;
-        const innerFrameColor = 0x2E6F1F;
-        const innerInset = 0.18;
-        const innerThickness = 0.2;
-        const innerHeight = 0.04;
 
         const borderMaterial = new THREE.MeshStandardMaterial({
             color: borderColor,
             roughness: 0.6,
             metalness: 0.1
-        });
-        const innerFrameMaterial = new THREE.MeshBasicMaterial({
-            color: innerFrameColor
         });
 
         const borderConfigs = [
@@ -108,33 +108,6 @@ export class Arena {
             wall.receiveShadow = true;
             this.walls.push(wall);
             this.scene.add(wall);
-        });
-
-        // Thin inner frame keeps the classic green edge clearly visible in top-down view.
-        const innerFrame = [
-            {
-                pos: [0, innerHeight / 2, -this.halfDepth + innerInset],
-                size: [this.totalWidth - innerInset * 2, innerHeight, innerThickness]
-            },
-            {
-                pos: [0, innerHeight / 2, this.halfDepth - innerInset],
-                size: [this.totalWidth - innerInset * 2, innerHeight, innerThickness]
-            },
-            {
-                pos: [-this.halfWidth + innerInset, innerHeight / 2, 0],
-                size: [innerThickness, innerHeight, this.totalDepth - innerInset * 2]
-            },
-            {
-                pos: [this.halfWidth - innerInset, innerHeight / 2, 0],
-                size: [innerThickness, innerHeight, this.totalDepth - innerInset * 2]
-            }
-        ];
-
-        innerFrame.forEach(config => {
-            const geometry = new THREE.BoxGeometry(...config.size);
-            const frame = new THREE.Mesh(geometry, innerFrameMaterial);
-            frame.position.set(...config.pos);
-            this.scene.add(frame);
         });
     }
 
