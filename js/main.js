@@ -62,8 +62,8 @@ class SnakeArcade {
             minZ: -10
         });
 
-        // Load difficulty-specific highscores
-        this.highscores = JSON.parse(localStorage.getItem('snakeHighscores') || '{}');
+        // Per-difficulty highscores (account-aware, with guest fallback)
+        this.highscores = this.getGuestHighscores();
         this.highscore = this.highscores[this.difficulty] || 0;
 
         this.survivalTime = 0;
@@ -136,7 +136,48 @@ class SnakeArcade {
 
         this.lastChatCount = 0; // Track message count for auto-open
         this.chatUnreadCount = 0;
+        this.seenChatMessageIds = new Set();
         this.init();
+    }
+
+    getDefaultHighscores() {
+        return { easy: 0, normal: 0, hard: 0 };
+    }
+
+    getGuestHighscores() {
+        const defaults = this.getDefaultHighscores();
+        try {
+            const parsed = JSON.parse(localStorage.getItem('snakeGuestHighscores') || '{}');
+            return {
+                easy: Number(parsed.easy) || 0,
+                normal: Number(parsed.normal) || 0,
+                hard: Number(parsed.hard) || 0
+            };
+        } catch (_err) {
+            return defaults;
+        }
+    }
+
+    saveGuestHighscores() {
+        localStorage.setItem('snakeGuestHighscores', JSON.stringify(this.highscores));
+    }
+
+    async refreshHighscoresForCurrentUser() {
+        try {
+            if (supabase.isLoggedIn()) {
+                this.highscores = await supabase.getUserHighscores();
+            } else {
+                this.highscores = this.getGuestHighscores();
+            }
+        } catch (err) {
+            console.error('[HIGHSCORE] Failed to load highscores:', err);
+            this.highscores = this.getDefaultHighscores();
+        }
+
+        this.highscore = Number(this.highscores[this.difficulty]) || 0;
+        if (this.ui?.highscore) {
+            this.ui.highscore.textContent = this.highscore.toLocaleString();
+        }
     }
 
     async init() {
@@ -382,8 +423,11 @@ class SnakeArcade {
                 document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
                 e.target.classList.add('active');
                 this.difficulty = e.target.dataset.level;
-                // Sync local highscore for selected difficulty
+                // Sync highscore for selected difficulty
                 this.highscore = this.highscores[this.difficulty] || 0;
+                if (this.ui.highscore) {
+                    this.ui.highscore.textContent = this.highscore.toLocaleString();
+                }
                 this.updateAIModeDisplay();
                 // Update leaderboard to show selected difficulty
                 this.updateLiveLeaderboardTab(this.difficulty);
@@ -397,6 +441,10 @@ class SnakeArcade {
         document.getElementById('restart-btn').addEventListener('click', () => this.restartGame());
         document.getElementById('menu-btn').addEventListener('click', () => this.showMenu());
         document.getElementById('leaderboard-btn')?.addEventListener('click', () => this.showLeaderboard());
+        document.getElementById('header-leaderboard-btn')?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showLeaderboard();
+        });
         document.getElementById('logout-profile-btn')?.addEventListener('click', () => this.logoutProfile());
         document.getElementById('menu-skins-btn')?.addEventListener('click', () => {
             document.getElementById('skin-modal')?.classList.remove('hidden');
@@ -487,9 +535,6 @@ class SnakeArcade {
             });
         });
 
-        // Auth form event listeners
-        this.setupAuthListeners();
-
         // Leaderboard event listeners
         this.setupLeaderboardListeners();
     }
@@ -528,6 +573,7 @@ class SnakeArcade {
                 this.state = GameState.MENU;
                 this.updatePromoVisibility();
                 this.updateProfileButton();
+                await this.refreshHighscoresForCurrentUser();
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -560,6 +606,7 @@ class SnakeArcade {
                 this.state = GameState.MENU;
                 this.updatePromoVisibility();
                 this.updateProfileButton();
+                await this.refreshHighscoresForCurrentUser();
             } catch (err) {
                 errorEl.textContent = err.message;
                 errorEl.classList.remove('hidden');
@@ -695,11 +742,17 @@ class SnakeArcade {
         const chatSend = document.getElementById('chat-send');
         const chatClose = document.getElementById('chat-close');
         const chatDock = document.getElementById('hud-header-right');
+        const chatStack = document.getElementById('hud-chat-stack');
 
         if (!chatPanel || !chatInput || !chatSend) return;
 
-        if (chatDock && chatPanel.parentElement !== chatDock) {
-            chatDock.appendChild(chatPanel);
+        const chatDockTarget = chatStack || chatDock;
+        if (chatDockTarget && chatPanel.parentElement !== chatDockTarget) {
+            if (chatStack) {
+                chatDockTarget.insertBefore(chatPanel, chatDockTarget.firstChild);
+            } else {
+                chatDockTarget.appendChild(chatPanel);
+            }
         }
 
         let unreadBadge = document.getElementById('chat-unread-badge');
@@ -815,8 +868,19 @@ class SnakeArcade {
 
         try {
             const messages = await supabase.getMessages();
+            const messageIds = messages
+                .map(msg => msg?.id)
+                .filter(id => id !== null && id !== undefined);
+            let incomingCount = 0;
 
-            const incomingCount = Math.max(0, messages.length - this.lastChatCount);
+            if (this.seenChatMessageIds.size === 0) {
+                this.seenChatMessageIds = new Set(messageIds);
+            } else {
+                incomingCount = messageIds.reduce((count, id) => {
+                    return count + (this.seenChatMessageIds.has(id) ? 0 : 1);
+                }, 0);
+                this.seenChatMessageIds = new Set(messageIds);
+            }
 
             if (incomingCount > 0 && chatPanel) {
                 const isGameplay = this.state === GameState.PLAYING;
@@ -957,24 +1021,111 @@ class SnakeArcade {
     }
 
     changeSkin(skinName) {
-        // Skin definitions with color and pattern
+        // Skin definitions with color/pattern plus rarity profile effects
         const skins = {
-            blue: { color: 0x4169E1, pattern: 'none' },
-            green: { color: 0x32CD32, pattern: 'circle' },
-            red: { color: 0xDC143C, pattern: 'heart' },
-            gold: { color: 0xFFD700, pattern: 'star' },
-            purple: { color: 0x9932CC, pattern: 'diamond' },
-            diamond: { color: 0x00FFFF, pattern: 'prisma' }
+            blue: { color: 0x4169E1, pattern: 'none', tier: 'common' },
+            green: { color: 0x32CD32, pattern: 'circle', tier: 'common' },
+            red: { color: 0xDC143C, pattern: 'heart', tier: 'common' },
+            gold: { color: 0xFFD700, pattern: 'star', tier: 'rare', emissiveIntensity: 0.12 },
+            purple: { color: 0x9932CC, pattern: 'diamond', tier: 'rare', emissiveIntensity: 0.14 },
+            diamond: { color: 0x00FFFF, pattern: 'prisma', tier: 'epic' },
+            premium: { color: 0x06B7FF, pattern: 'premium', tier: 'epic' },
+            epic: { color: 0x8A2BE2, pattern: 'epic', tier: 'epic' },
+            mythic: { color: 0xD1006D, pattern: 'mythic', tier: 'legendary' },
+            legend: { color: 0xFF9800, pattern: 'legend', tier: 'legendary' },
+            arcana: {
+                color: 0x79B9FF,
+                pattern: 'arcana',
+                tier: 'legendary',
+                transparent: true,
+                opacity: 0.88,
+                roughness: 0.24,
+                metalness: 0.05,
+                emissiveColor: 0x8fe6ff,
+                emissiveIntensity: 0.72,
+                aura: true,
+                auraStyle: 'arcane',
+                auraParticleCount: 30,
+                auraParticleSize: 0.08,
+                auraOpacity: 0.56,
+                auraColor: 0x8de8ff,
+                auraSecondaryColor: 0xd2a8ff,
+                auraDriftSpeed: 0.78,
+                trail: true,
+                trailLifetime: 0.34,
+                trailOpacity: 0.34,
+                trailColor: 0x96ddff,
+                patternScrollSpeed: 0.6,
+                patternPulseStrength: 0.18,
+                skinPulseSpeed: 3.1,
+                coreColor: 0xcdf6ff,
+                coreIntensity: 0.84,
+                corePulseStrength: 0.25,
+                corePulseSpeed: 3.6
+            },
+            cyber: {
+                color: 0x05bde7,
+                pattern: 'cyber',
+                tier: 'legendary',
+                roughness: 0.18,
+                metalness: 0.42,
+                emissiveColor: 0x6ef7ff,
+                emissiveIntensity: 0.66,
+                aura: true,
+                auraStyle: 'spark',
+                auraParticleCount: 16,
+                auraParticleSize: 0.07,
+                auraOpacity: 0.44,
+                auraColor: 0x78f9ff,
+                auraSecondaryColor: 0x52bbff,
+                auraDriftSpeed: 0.95,
+                trail: true,
+                trailLifetime: 0.3,
+                trailOpacity: 0.32,
+                trailColor: 0x7ef8ff,
+                patternScrollSpeed: 0.72,
+                patternPulseStrength: 0.16,
+                skinPulseSpeed: 4.2,
+                coreColor: 0xbffeff,
+                coreIntensity: 0.76,
+                corePulseStrength: 0.2,
+                corePulseSpeed: 4.8
+            },
+            immortal: {
+                color: 0x9ab563,
+                pattern: 'immortal',
+                tier: 'epic',
+                roughness: 0.22,
+                metalness: 0.52,
+                emissiveColor: 0xc7f593,
+                emissiveIntensity: 0.24,
+                aura: true,
+                auraStyle: 'leaf',
+                auraParticleCount: 10,
+                auraParticleSize: 0.06,
+                auraOpacity: 0.26,
+                auraColor: 0xcff7ab,
+                auraSecondaryColor: 0xeef8d3,
+                auraDriftSpeed: 0.42,
+                trail: false,
+                patternScrollSpeed: 0.18,
+                patternPulseStrength: 0.06,
+                skinPulseSpeed: 1.4,
+                coreColor: 0xe4ffc5,
+                coreIntensity: 0.28,
+                corePulseStrength: 0.08,
+                corePulseSpeed: 1.5
+            }
         };
 
         const skin = skins[skinName] || skins.blue;
         if (this.snake) {
-            this.snake.setSkin(skin.color, skin.pattern);
+            this.snake.setSkin(skin);
         }
     }
 
     hideLoading() {
-        setTimeout(() => {
+        setTimeout(async () => {
             this.ui.loading.classList.add('hidden');
             // Check if user is logged in
             if (supabase.isLoggedIn()) {
@@ -985,6 +1136,7 @@ class SnakeArcade {
             }
             this.updatePromoVisibility();
             this.updateProfileButton();
+            await this.refreshHighscoresForCurrentUser();
 
             const chatPanel = document.getElementById('chat-panel');
             if (chatPanel) {
@@ -1019,6 +1171,10 @@ class SnakeArcade {
         const user = supabase.getUser();
         const isVisible = !!user && this.ui.auth?.classList.contains('hidden');
         profileBtn.classList.toggle('hidden', !isVisible);
+        const headerLeaderboardBtn = document.getElementById('header-leaderboard-btn');
+        if (headerLeaderboardBtn) {
+            headerLeaderboardBtn.classList.toggle('hidden', !isVisible);
+        }
 
         if (!isVisible) return;
 
@@ -1050,6 +1206,16 @@ class SnakeArcade {
         if (chatPanel) {
             chatPanel.classList.add('hidden');
             chatPanel.classList.add('chat-minimized');
+        }
+        this.chatUnreadCount = 0;
+        this.seenChatMessageIds.clear();
+        if (typeof this.updateChatUnreadBadge === 'function') {
+            this.updateChatUnreadBadge();
+        }
+        this.highscores = this.getGuestHighscores();
+        this.highscore = this.highscores[this.difficulty] || 0;
+        if (this.ui.highscore) {
+            this.ui.highscore.textContent = this.highscore.toLocaleString();
         }
 
         this.audioManager.stopBGM();
@@ -1266,6 +1432,7 @@ class SnakeArcade {
             if (isHighScore) {
                 console.log('New personal best!');
             }
+            await this.refreshHighscoresForCurrentUser();
             // Refresh the live leaderboard to show updated scores for this difficulty
             this.updateLiveLeaderboardTab(this.difficulty);
         } catch (err) {
@@ -1597,7 +1764,9 @@ class SnakeArcade {
         if (this.score > this.highscore) {
             this.highscore = this.score;
             this.highscores[this.difficulty] = this.highscore;
-            localStorage.setItem('snakeHighscores', JSON.stringify(this.highscores));
+            if (!supabase.isLoggedIn()) {
+                this.saveGuestHighscores();
+            }
         }
         if (this.ui.highscore) {
             this.ui.highscore.textContent = this.highscore.toLocaleString();
@@ -1641,26 +1810,19 @@ class SnakeArcade {
         const combo = this.ui.comboHud;
         if (!combo) return;
 
-        const isMobile = window.innerWidth <= 768;
-        if (!isMobile) {
+        const canvas = this.renderer?.domElement;
+        if (!canvas) {
             combo.style.removeProperty('top');
             combo.style.setProperty('bottom', '20px', 'important');
             return;
         }
 
-        const canvas = this.renderer?.domElement;
-        const controls = document.getElementById('mobile-controls');
-        if (!canvas || !controls) return;
-
         const boardRect = canvas.getBoundingClientRect();
-        const controlsRect = controls.getBoundingClientRect();
         const comboRect = combo.getBoundingClientRect();
         const comboHeight = Math.max(52, Math.round(comboRect.height || 64));
-
-        const desiredTop = Math.round(boardRect.bottom - comboHeight - 6);
-        const maxTop = Math.round(controlsRect.top - comboHeight - 8);
-        const minTop = Math.round(boardRect.top + 8);
-        const safeTop = Math.max(minTop, Math.min(desiredTop, maxTop));
+        const topAboveBoard = Math.round(boardRect.top - comboHeight - 8);
+        const maxTop = Math.max(8, Math.round(window.innerHeight - comboHeight - 8));
+        const safeTop = Math.max(8, Math.min(topAboveBoard, maxTop));
 
         combo.style.setProperty('top', `${safeTop}px`, 'important');
         combo.style.setProperty('bottom', 'auto', 'important');

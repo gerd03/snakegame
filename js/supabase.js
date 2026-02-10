@@ -74,10 +74,29 @@ class SupabaseClient {
 
     // Register new user
     async register(displayName, username, password) {
+        const normalizedDisplayName = (displayName || '').trim();
+        const normalizedUsername = (username || '').trim();
+
+        if (!normalizedDisplayName || !normalizedUsername) {
+            throw new Error('Display name and username are required');
+        }
+
         // Check if username exists
-        const existing = await this.fetch(`users?username=eq.${encodeURIComponent(username)}&select=id`);
+        const existing = await this.fetch(`users?username=eq.${encodeURIComponent(normalizedUsername)}&select=id`);
         if (existing.length > 0) {
             throw new Error('Username already exists');
+        }
+
+        // Check if display name already exists (case-insensitive)
+        const existingDisplayNames = await this.fetch(
+            `users?display_name=ilike.${encodeURIComponent(normalizedDisplayName)}&select=id,display_name`
+        );
+        const displayTaken = existingDisplayNames.some((row) => {
+            const name = (row?.display_name || '').trim().toLowerCase();
+            return name === normalizedDisplayName.toLowerCase();
+        });
+        if (displayTaken) {
+            throw new Error('Display name already exists');
         }
 
         // Hash password
@@ -87,8 +106,8 @@ class SupabaseClient {
         const result = await this.fetch('users', {
             method: 'POST',
             body: {
-                username,
-                display_name: displayName,
+                username: normalizedUsername,
+                display_name: normalizedDisplayName,
                 password_hash: passwordHash
             }
         });
@@ -166,6 +185,30 @@ class SupabaseClient {
             `leaderboard?difficulty=eq.${difficulty}&select=display_name,score&order=score.desc&limit=50`
         );
         return results;
+    }
+
+    // Get personal best scores per difficulty for current user
+    async getUserHighscores() {
+        const defaults = { easy: 0, normal: 0, hard: 0 };
+        if (!this.currentUser) return defaults;
+
+        const userId = encodeURIComponent(this.currentUser.id);
+        const rows = await this.fetch(
+            `leaderboard?user_id=eq.${userId}&select=difficulty,score&order=score.desc&limit=200`
+        );
+
+        const highscores = { ...defaults };
+        rows.forEach((row) => {
+            if (!row || !row.difficulty) return;
+            const diff = row.difficulty;
+            const score = Number(row.score) || 0;
+            if (!(diff in highscores)) return;
+            if (score > highscores[diff]) {
+                highscores[diff] = score;
+            }
+        });
+
+        return highscores;
     }
 
     // Get all leaderboards (easy, normal, hard)
